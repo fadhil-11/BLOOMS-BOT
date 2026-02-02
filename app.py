@@ -174,6 +174,14 @@ def create_app() -> Flask:
 
         debug_report["bloom_classified"] = len(classified_questions)
         debug_report["bloom_failed"] = len(stored_questions) - len(classified_questions)
+        debug_report["bank_size_total"] = len(classified_questions)
+        bank_by_bloom = {}
+        bank_by_marks = {}
+        for q in classified_questions:
+            bank_by_bloom[q.bloom_level] = bank_by_bloom.get(q.bloom_level, 0) + 1
+            bank_by_marks[q.marks] = bank_by_marks.get(q.marks, 0) + 1
+        debug_report["bank_size_by_bloom"] = bank_by_bloom
+        debug_report["bank_size_by_marks"] = bank_by_marks
 
         if not classified_questions:
             return jsonify({"error": "No questions could be classified with Bloom levels."}), 422
@@ -225,11 +233,11 @@ def _assign_marks_by_bloom(bloom_level: str) -> int:
     """
     marks_map = {
         "Remember": 2,
-        "Understand": 3,
+        "Understand": 2,
         "Apply": 5,
-        "Analyze": 7,
+        "Analyze": 5,
         "Evaluate": 10,
-        "Create": 12,
+        "Create": 10,
     }
     return marks_map.get(bloom_level, 5)  # Default to 5 if unknown
 

@@ -56,8 +56,8 @@ STRICT RULES:
 - Questions must be suitable for a real written university exam.
 
 QUESTION REQUIREMENTS:
-- Generate exactly 6 questions.
-- Mix of short-answer (2 marks) and descriptive (5 marks) style questions.
+- Generate exactly 12 questions.
+- Mix of short-answer and descriptive style questions.
 - Use appropriate academic verbs (define, explain, differentiate, write, implement).
 
 SYLLABUS CONTENT:
@@ -70,6 +70,12 @@ Q3. <question>
 Q4. <question>
 Q5. <question>
 Q6. <question>
+Q7. <question>
+Q8. <question>
+Q9. <question>
+Q10. <question>
+Q11. <question>
+Q12. <question>
 
 Do NOT include Bloom levels, difficulty, marks, explanations, or extra text."""
 
