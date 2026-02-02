@@ -20,8 +20,12 @@ from flask import Flask, render_template, request, jsonify
 from pdf_processor import extract_text_from_pdf
 from text_chunker import chunk_text
 from gpt_question_gen import generate_questions_for_chunk, GeneratedQuestion
-from question_validator import validate_question_batch, Question
-from blooms_classifier import classify_bloom_level_gpt, BloomClassification
+from question_validator import (
+    build_keyword_set_from_text,
+    validate_question_batch_with_report,
+    Question,
+)
+from blooms_classifier import classify_bloom_level_gpt, classify_bloom_level_heuristic
 from paper_generator import generate_question_paper
 
 
@@ -42,6 +46,7 @@ def create_app() -> Flask:
         """
         Main generation endpoint following the required pipeline.
         """
+        debug_mode = request.args.get("debug") == "1"
         # Step 1: PDF Upload (handled by Flask)
         if "syllabus_pdf" not in request.files:
             return jsonify({"error": "No PDF uploaded"}), 400
@@ -61,29 +66,79 @@ def create_app() -> Flask:
         if not raw_text or not raw_text.strip():
             return jsonify({"error": "Extracted syllabus is empty; cannot generate questions."}), 400
 
+        keyword_set = build_keyword_set_from_text(raw_text)
+
         # Step 3: Text Cleaning + Chunking (500-800 words)
         chunks = chunk_text(raw_text, min_words=500, max_words=800, overlap_words=100)
         
         if not chunks:
             return jsonify({"error": "Could not chunk syllabus text."}), 400
 
+        debug_report = {
+            "chunks_created": len(chunks),
+            "chunk_word_counts": [_approx_word_count(chunk) for chunk in chunks][:10],
+            "raw_text_chars": len(raw_text),
+            "raw_text_words": _approx_word_count(raw_text),
+        }
+
         # Step 4: GPT Question Generation (NO Bloom here)
         all_raw_questions = []
+        raw_questions_per_chunk = {}
         for chunk_id, chunk in enumerate(chunks):
             raw_questions = generate_questions_for_chunk(
                 chunk_text=chunk,
                 source_chunk_id=chunk_id,
             )
+            raw_questions_per_chunk[chunk_id] = len(raw_questions)
             all_raw_questions.extend(raw_questions)
 
         if not all_raw_questions:
             return jsonify({"error": "No questions could be generated from the syllabus."}), 422
 
+        debug_report["raw_questions_generated"] = len(all_raw_questions)
+        debug_report["raw_questions_per_chunk"] = raw_questions_per_chunk
+
         # Convert GeneratedQuestion to Question objects for validation
         question_objects = [Question(q.text, q.source_chunk_id) for q in all_raw_questions]
 
         # Step 5: Question Validation (hard rejection rules)
-        valid_questions = validate_question_batch(question_objects)
+        valid_questions, rejected_items = validate_question_batch_with_report(
+            question_objects,
+            keyword_set=keyword_set,
+        )
+
+        rejection_reasons_count = {}
+        rejection_examples = {}
+        for item in rejected_items:
+            reason = item.get("reason") or "unknown"
+            rejection_reasons_count[reason] = rejection_reasons_count.get(reason, 0) + 1
+            if reason not in rejection_examples:
+                rejection_examples[reason] = []
+            if len(rejection_examples[reason]) < 2:
+                rejection_examples[reason].append(item.get("text", ""))
+
+        debug_report["accepted_questions"] = len(valid_questions)
+        debug_report["rejected_questions"] = len(rejected_items)
+        debug_report["rejection_reasons_count"] = rejection_reasons_count
+        debug_report["rejection_examples"] = rejection_examples
+
+        top_rejections = sorted(
+            rejection_reasons_count.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )[:3]
+        top_rejections_text = (
+            ", ".join(f"{reason}={count}" for reason, count in top_rejections)
+            if top_rejections
+            else "none"
+        )
+        print(
+            f"[DEBUG] chunks={debug_report['chunks_created']}, "
+            f"raw_generated={debug_report['raw_questions_generated']}, "
+            f"accepted={debug_report['accepted_questions']}, "
+            f"rejected={debug_report['rejected_questions']}"
+        )
+        print(f"[DEBUG] top_rejections: {top_rejections_text}")
 
         if not valid_questions:
             return jsonify({"error": "No valid questions passed validation."}), 422
@@ -102,6 +157,8 @@ def create_app() -> Flask:
         classified_questions = []
         for stored_q in stored_questions:
             classification = classify_bloom_level_gpt(stored_q["text"])
+            if classification is None:
+                classification = classify_bloom_level_heuristic(stored_q["text"])
             if classification:
                 # Create a Question object with Bloom classification
                 q_obj = Question(
@@ -114,6 +171,9 @@ def create_app() -> Flask:
                 q_obj.marks = _assign_marks_by_bloom(classification.level)
                 classified_questions.append(q_obj)
             # If classification fails, skip the question (strict quality control)
+
+        debug_report["bloom_classified"] = len(classified_questions)
+        debug_report["bloom_failed"] = len(stored_questions) - len(classified_questions)
 
         if not classified_questions:
             return jsonify({"error": "No questions could be classified with Bloom levels."}), 422
@@ -138,11 +198,16 @@ def create_app() -> Flask:
             )
         except ValueError as e:
             return jsonify({"error": f"Could not generate paper: {e}"}), 422
+        
+        debug_report["paper_total_marks_target"] = total_marks
+        debug_report["paper_questions_selected"] = len(paper.get("questions", [])) if paper else 0
 
         # Step 9: Review & Export (return JSON)
         # Store the generated paper
         questions_storage.append(paper)
         
+        if debug_mode:
+            return jsonify({"paper": paper, "debug": debug_report}), 200
         return jsonify(paper), 200
 
     @app.route("/api/questions", methods=["GET"])
@@ -167,6 +232,13 @@ def _assign_marks_by_bloom(bloom_level: str) -> int:
         "Create": 12,
     }
     return marks_map.get(bloom_level, 5)  # Default to 5 if unknown
+
+
+def _approx_word_count(text: str) -> int:
+    """Approximate word count using whitespace splitting."""
+    if not text:
+        return 0
+    return len(text.split())
 
 
 if __name__ == "__main__":

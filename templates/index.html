@@ -16,6 +16,11 @@
         <label for="syllabus_pdf">Upload syllabus / lecture notes (PDF):</label>
         <input type="file" id="syllabus_pdf" name="syllabus_pdf" accept="application/pdf" required />
 
+        <label>
+          <input type="checkbox" id="debug_mode" />
+          Include debug report
+        </label>
+
         <button type="submit">Generate Question Paper</button>
       </form>
 
@@ -42,9 +47,11 @@
 
         const formData = new FormData();
         formData.append("syllabus_pdf", fileInput.files[0]);
+        const debugMode = document.getElementById("debug_mode").checked;
+        const url = debugMode ? "/api/generate?debug=1" : "/api/generate";
 
         try {
-          const resp = await fetch("/api/generate", {
+          const resp = await fetch(url, {
             method: "POST",
             body: formData,
           });
@@ -55,7 +62,15 @@
             return;
           }
 
-          statusEl.textContent = "Generation complete.";
+          if (data.debug) {
+            const dbg = data.debug;
+            statusEl.textContent =
+              "Generation complete. " +
+              `chunks=${dbg.chunks_created}, raw_generated=${dbg.raw_questions_generated}, ` +
+              `accepted=${dbg.accepted_questions}, rejected=${dbg.rejected_questions}`;
+          } else {
+            statusEl.textContent = "Generation complete.";
+          }
           resultEl.textContent = JSON.stringify(data, null, 2);
         } catch (err) {
           console.error(err);

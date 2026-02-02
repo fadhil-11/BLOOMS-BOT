@@ -5,7 +5,8 @@ This module enforces strict quality checks and discards bad questions.
 It does NOT attempt to fix questions - bad questions are rejected.
 """
 
-from typing import List
+from collections import Counter
+from typing import List, Optional, Set, Tuple
 
 # Forbidden words/phrases that cause immediate rejection
 FORBIDDEN_WORDS = {
@@ -17,67 +18,35 @@ FORBIDDEN_WORDS = {
     "any question",
 }
 
-# Forbidden standalone words (must appear as complete words, not substrings)
-FORBIDDEN_STANDALONE = {
-    "zero",
-    "unlike",
-    "therefore",
-}
-
-# Technical nouns that should appear in CS questions
-# This is a minimal set - questions should reference real CS concepts
-CS_TECHNICAL_TERMS = {
-    "algorithm", "algorithms",
-    "data structure", "data structures",
-    "array", "arrays",
-    "linked list", "linked lists",
-    "stack", "stacks",
-    "queue", "queues",
-    "tree", "trees",
-    "graph", "graphs",
-    "hash", "hashing",
-    "sorting", "sort",
-    "searching", "search",
-    "complexity", "time complexity", "space complexity",
-    "operating system", "operating systems",
-    "process", "processes",
-    "thread", "threads",
-    "scheduling",
-    "deadlock",
-    "database", "databases",
-    "sql",
-    "transaction", "transactions",
-    "normalization",
-    "network", "networking",
-    "protocol", "protocols",
-    "tcp", "udp",
-    "http", "https",
-    "routing",
-    "encryption",
-    "compiler", "compilers",
-    "parsing",
-    "automata",
-    "finite automaton",
-    "turing machine",
-    "machine learning",
-    "neural network",
-    "programming",
-    "code",
-    "function", "functions",
-    "class", "classes",
-    "object", "objects",
-    "variable", "variables",
-    "loop", "loops",
-    "recursion",
-    "pointer", "pointers",
-    "memory",
-    "file", "files",
-    "interface", "interfaces",
-    "api",
+# Small fallback technical terms if no syllabus keywords are provided
+FALLBACK_CS_TERMS = {
+    "algorithm",
+    "data",
+    "structure",
+    "database",
+    "network",
+    "protocol",
+    "system",
     "software",
     "hardware",
-    "system",
-    "architecture",
+    "api",
+    "programming",
+    "security",
+}
+
+# Basic English stopwords (lowercase)
+STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has",
+    "he", "in", "is", "it", "its", "of", "on", "that", "the", "to", "was",
+    "were", "will", "with", "you", "your", "we", "our", "they", "their",
+    "this", "these", "those", "or", "if", "then", "than", "but", "not",
+    "can", "could", "should", "would", "may", "might", "do", "does", "did",
+    "what", "which", "who", "whom", "why", "how", "when", "where", "so",
+    "such", "about", "into", "over", "under", "between", "within", "without",
+    "because", "while", "also", "there", "here", "all", "any", "some",
+    "no", "yes", "one", "two", "three", "more", "most", "much", "many",
+    "each", "every", "other", "another", "same", "new", "old", "use", "used",
+    "using", "useful", "example", "examples", "define", "definition",
 }
 
 
@@ -98,101 +67,149 @@ def validate_question_batch(candidates: List[Question]) -> List[Question]:
     Apply strict validation and discard any question that fails.
     
     Validation rules:
-    1. Basic format (length, question mark)
-    2. Forbidden words/phrases
-    3. Technical noun presence
-    4. Minimum meaningful word count
+    1. Forbidden words/phrases
+    2. Minimum meaningful word count (>= 6)
+    3. Keyword overlap with syllabus terms or fallback CS terms
     
     Bad questions are discarded, NOT fixed.
     """
-    valid = []
-    for q in candidates:
-        if _is_valid(q):
-            valid.append(q)
+    valid, _rejected = validate_question_batch_with_report(candidates)
     return valid
+
+
+def validate_question_batch_with_report(
+    candidates: List[Question],
+    keyword_set: Optional[Set[str]] = None,
+) -> Tuple[List[Question], List[dict]]:
+    """
+    Apply validation and return both valid questions and rejection details.
+    """
+    valid = []
+    rejected = []
+    for q in candidates:
+        is_valid, reason = _validate_question(q, keyword_set)
+        if is_valid:
+            valid.append(q)
+        else:
+            rejected.append(
+                {
+                    "text": q.text,
+                    "source_chunk_id": q.source_chunk_id,
+                    "reason": reason,
+                }
+            )
+    return valid, rejected
 
 
 def _is_valid(q: Question) -> bool:
     """Check if a question passes all validation rules."""
-    if not _is_basic_format_valid(q):
-        return False
-    if not _passes_forbidden_filters(q):
-        return False
-    if not _has_technical_noun(q):
-        return False
-    if not _has_minimum_words(q):
-        return False
-    return True
+    is_valid, _reason = _validate_question(q, keyword_set=None)
+    return is_valid
 
 
-def _is_basic_format_valid(q: Question) -> bool:
-    """Check basic format: non-empty, has question mark, minimum length."""
-    txt = q.text.strip()
-    if not txt:
-        return False
-    if "?" not in txt:
-        return False
-    if len(txt) < 20:  # Minimum reasonable question length
-        return False
-    return True
+def _validate_question(
+    q: Question,
+    keyword_set: Optional[Set[str]],
+) -> Tuple[bool, Optional[str]]:
+    """Return validation result and rejection reason (if any)."""
+    is_valid, reason = _passes_forbidden_filters(q)
+    if not is_valid:
+        return False, reason
+    is_valid, reason = _has_minimum_words(q)
+    if not is_valid:
+        return False, reason
+    is_valid, reason = _has_keyword_overlap(q, keyword_set)
+    if not is_valid:
+        return False, reason
+    return True, None
 
 
-def _passes_forbidden_filters(q: Question) -> bool:
+def _passes_forbidden_filters(q: Question) -> Tuple[bool, Optional[str]]:
     """Check for forbidden words/phrases."""
     lowered = q.text.lower()
     
-    # Check for forbidden phrases
+    # Check for forbidden words/phrases (strict)
     for forbidden in FORBIDDEN_WORDS:
         if forbidden in lowered:
-            return False
-    
-    # Check for forbidden standalone words (as complete words)
-    words = {w.strip(".,;:?!()[]{}") for w in lowered.split()}
-    for forbidden_word in FORBIDDEN_STANDALONE:
-        if forbidden_word in words:
-            # Allow "zero" only if it's clearly numerical (e.g., "zero-based indexing" is OK)
-            if forbidden_word == "zero":
-                # Check if it's part of a technical term
-                if "zero-based" in lowered or "zero-indexed" in lowered:
-                    continue
-                # Check if there's a number nearby
-                if any(char.isdigit() for char in lowered):
-                    continue
-            return False
-    
-    # Reject vague phrases
-    if "any question" in lowered:
-        return False
-    if "give an example" in lowered and not any(term in lowered for term in CS_TECHNICAL_TERMS):
-        return False
-    
-    # Reject "Professor" unless it's clearly part of a topic name
-    if "professor" in words:
-        # Allow if it's part of a known pattern (e.g., "Professor's algorithm")
-        if "professor" in lowered and not any(
-            pattern in lowered for pattern in ["algorithm", "method", "approach", "technique"]
-        ):
-            return False
-    
-    return True
+            return False, f"forbidden_word:{forbidden}"
+
+    return True, None
 
 
-def _has_technical_noun(q: Question) -> bool:
-    """Check if question contains at least one technical CS term."""
-    lowered = q.text.lower()
-    
-    # Check for technical terms (case-insensitive)
-    for term in CS_TECHNICAL_TERMS:
-        if term.lower() in lowered:
-            return True
-    
-    return False
+def _has_keyword_overlap(
+    q: Question,
+    keyword_set: Optional[Set[str]],
+) -> Tuple[bool, Optional[str]]:
+    """Check if question overlaps syllabus keywords or fallback terms."""
+    tokens = _tokenize_with_acronyms(q.text)
+    if keyword_set:
+        if any(token in keyword_set for token in tokens):
+            return True, None
+    if any(token.lower() in FALLBACK_CS_TERMS for token in tokens):
+        return True, None
+    return False, "no_keyword_overlap"
 
 
-def _has_minimum_words(q: Question) -> bool:
+def _has_minimum_words(q: Question) -> Tuple[bool, Optional[str]]:
     """Check if question has at least 6 meaningful words."""
     # Remove punctuation and split
     words = [w.strip(".,;:?!()[]{}") for w in q.text.split()]
     # Filter out very short words (likely not meaningful)
     meaningful_words = [w for w in words if len(w) > 2]
-    return len(meaningful_words) >= 6
+    if len(meaningful_words) >= 6:
+        return True, None
+    return False, "too_short"
+
+
+def build_keyword_set_from_text(raw_text: str) -> Set[str]:
+    """
+    Build a keyword set from syllabus text, preserving acronyms.
+    """
+    if not raw_text:
+        return set()
+
+    tokens = _tokenize_with_acronyms(raw_text)
+    filtered = []
+    for token in tokens:
+        lower = token.lower()
+        if lower in STOPWORDS:
+            continue
+        if len(token) >= 4 or (token.isupper() and len(token) >= 2):
+            filtered.append(token)
+
+    counts = Counter(filtered)
+    top_tokens = [token for token, _count in counts.most_common(200)]
+    return set(top_tokens)
+
+
+def _tokenize_with_acronyms(text: str) -> List[str]:
+    """
+    Tokenize text, lowercasing words while preserving ALL-CAPS acronyms.
+    """
+    tokens = []
+    current = []
+    for ch in text:
+        if ch.isalnum():
+            current.append(ch)
+        else:
+            if current:
+                token = "".join(current)
+                tokens.append(_normalize_token(token))
+                current = []
+    if current:
+        token = "".join(current)
+        tokens.append(_normalize_token(token))
+    return tokens
+
+
+def _normalize_token(token: str) -> str:
+    if _is_acronymish(token):
+        return token.upper()
+    return token.lower()
+
+
+def _is_acronymish(token: str) -> bool:
+    if len(token) < 2:
+        return False
+    uppercase_count = sum(1 for ch in token if ch.isupper())
+    return uppercase_count >= 2

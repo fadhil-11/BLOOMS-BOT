@@ -1,5 +1,5 @@
-import json
 import os
+import re
 from dataclasses import dataclass
 from typing import List, Literal, Optional
 
@@ -115,12 +115,8 @@ def classify_bloom_level_gpt(question: str) -> Optional[BloomClassification]:
 
 Question: {question}
 
-Return ONLY a JSON object with this exact structure:
-{{
-  "level": "<one of: Remember, Understand, Apply, Analyze, Evaluate, Create>",
-  "verb": "<the main cognitive verb in the question>",
-  "confidence": <float between 0.0 and 1.0>
-}}
+Return ONLY one of the following levels:
+Remember, Understand, Apply, Analyze, Evaluate, Create
 
 Do not include any explanation or additional text."""
 
@@ -134,32 +130,36 @@ Do not include any explanation or additional text."""
                     "content": prompt,
                 },
             ],
-            response_format={"type": "json_object"},
         )
 
         raw_output = response.choices[0].message.content
         if not raw_output:
             return None
 
-        parsed = json.loads(raw_output)
-        
-        level_str = parsed.get("level", "").strip()
-        if level_str not in {"Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"}:
+        level_str = _parse_level(raw_output)
+        if level_str is None:
             return None
-        
-        verb = parsed.get("verb", "").strip()
-        confidence = float(parsed.get("confidence", 0.5))
-        
+
+        verb = _extract_leading_verb(question) or ""
         return BloomClassification(
             question=question.strip(),
-            level=level_str,  # type: ignore
+            level=level_str,
             verb=verb,
-            confidence=confidence,
+            confidence=0.9,
         )
     
     except Exception as e:
         print(f"Error classifying question with GPT: {e}")
         return None
+
+
+def _parse_level(text: str) -> Optional[BloomLevel]:
+    if not text:
+        return None
+    for level in ("Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"):
+        if re.search(rf"\\b{level}\\b", text, re.IGNORECASE):
+            return level  # type: ignore
+    return None
 
 
 def classify_questions_batch(questions: List[str]) -> List[Optional[BloomClassification]]:

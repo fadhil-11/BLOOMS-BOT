@@ -49,29 +49,19 @@ QUESTION_GENERATION_PROMPT = """You are a university-level Computer Science exam
 Generate clear, meaningful, exam-ready questions strictly based on the syllabus content provided.
 
 STRICT RULES:
-
-Every question must test a specific Computer Science concept explicitly mentioned in the syllabus
-
-Every technical noun used must appear in the syllabus or be a directly related standard CS term
-
-Do NOT invent abstract, placeholder, or generic topic names
-
-Questions must be suitable for a real written exam
+- Every question must test a specific Computer Science concept explicitly mentioned in the syllabus.
+- Every technical noun used must appear in the syllabus or be a directly related standard CS term.
+- Do NOT invent abstract or placeholder topic names.
+- Do NOT use vague words such as Zero, Unlike, Therefore, Something, Any Question.
+- Questions must be suitable for a real written university exam.
 
 QUESTION REQUIREMENTS:
-
-Generate exactly 6 questions
-
-Mix of:
-
-Short-answer (2 marks)
-
-Descriptive (5 marks)
-
-Use proper academic verbs (define, explain, differentiate, write, implement)
+- Generate exactly 6 questions.
+- Mix of short-answer (2 marks) and descriptive (5 marks) style questions.
+- Use appropriate academic verbs (define, explain, differentiate, write, implement).
 
 SYLLABUS CONTENT:
-{{SYLLABUS_TEXT_CHUNK}}
+<<<SYLLABUS_TEXT_CHUNK>>>
 
 OUTPUT FORMAT (STRICT):
 Q1. <question>
@@ -81,8 +71,7 @@ Q4. <question>
 Q5. <question>
 Q6. <question>
 
-
-Do not include Bloom levels, difficulty, explanations, or extra text."""
+Do NOT include Bloom levels, difficulty, marks, explanations, or extra text."""
 
 
 def generate_questions_for_chunk(
@@ -112,7 +101,7 @@ def generate_questions_for_chunk(
     client = _get_client()
     
     # Replace the placeholder in the prompt with actual syllabus text
-    prompt = QUESTION_GENERATION_PROMPT.replace("{{SYLLABUS_TEXT_CHUNK}}", chunk_text)
+    prompt = QUESTION_GENERATION_PROMPT.replace("<<<SYLLABUS_TEXT_CHUNK>>>", chunk_text)
 
     try:
         response = client.chat.completions.create(
@@ -162,9 +151,6 @@ def _parse_question_output(output: str, source_chunk_id: Optional[int]) -> List[
         if match:
             question_text = match.group(1).strip()
             if question_text and len(question_text) > 5:
-                # Ensure question ends with "?" for validation
-                if not question_text.endswith("?"):
-                    question_text = question_text.rstrip(".") + "?"
                 questions.append(GeneratedQuestion(
                     text=question_text,
                     source_chunk_id=source_chunk_id
@@ -180,9 +166,6 @@ def _parse_question_output(output: str, source_chunk_id: Optional[int]) -> List[
                 # Extract everything after the number/Q prefix
                 question_text = re.sub(r'^(Q?\d+[\.\)]\s+|Q?\d+\s+)', '', line, flags=re.IGNORECASE).strip()
                 if question_text and len(question_text) > 5:
-                    # Ensure question ends with "?" for validation
-                    if not question_text.endswith("?"):
-                        question_text = question_text.rstrip(".") + "?"
                     questions.append(GeneratedQuestion(
                         text=question_text,
                         source_chunk_id=source_chunk_id
