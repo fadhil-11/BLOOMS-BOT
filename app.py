@@ -25,7 +25,11 @@ from question_validator import (
     validate_question_batch_with_report,
     Question,
 )
-from blooms_classifier import classify_bloom_level_gpt, classify_bloom_level_heuristic
+from blooms_classifier import (
+    classify_bloom_level_gpt,
+    classify_bloom_level_heuristic,
+    classify_bloom_levels_gpt_batch,
+)
 from paper_generator import generate_question_paper
 
 
@@ -79,6 +83,8 @@ def create_app() -> Flask:
             "chunk_word_counts": [_approx_word_count(chunk) for chunk in chunks][:10],
             "raw_text_chars": len(raw_text),
             "raw_text_words": _approx_word_count(raw_text),
+            "bloom_api_calls_count": 0,
+            "bloom_batch_size": 15,
         }
 
         # Step 4: GPT Question Generation (NO Bloom here)
@@ -155,25 +161,35 @@ def create_app() -> Flask:
         # Step 7: GPT Bloom Classification (separate call)
         # Classify each question and add Bloom level
         classified_questions = []
-        for stored_q in stored_questions:
-            classification = classify_bloom_level_gpt(stored_q["text"])
-            if classification is None:
-                classification = classify_bloom_level_heuristic(stored_q["text"])
-            if classification:
-                # Create a Question object with Bloom classification
-                q_obj = Question(
-                    text=stored_q["text"],
-                    source_chunk_id=stored_q["source_chunk_id"]
-                )
-                q_obj.bloom_level = classification.level
-                q_obj.bloom_verb = classification.verb
-                # Assign marks based on Bloom level (simple heuristic)
-                q_obj.marks = _assign_marks_by_bloom(classification.level)
-                classified_questions.append(q_obj)
-            # If classification fails, skip the question (strict quality control)
+        batch_size = 15
+        bloom_api_calls = 0
+        for start in range(0, len(stored_questions), batch_size):
+            batch = stored_questions[start:start + batch_size]
+            batch_texts = [q["text"] for q in batch]
+            batch_results = classify_bloom_levels_gpt_batch(batch_texts)
+            bloom_api_calls += 1
+
+            for stored_q, classification in zip(batch, batch_results):
+                if classification is None:
+                    classification = classify_bloom_level_heuristic(stored_q["text"])
+                    if classification is None:
+                        classification = classify_bloom_level_gpt(stored_q["text"])
+                        bloom_api_calls += 1
+                if classification:
+                    q_obj = Question(
+                        text=stored_q["text"],
+                        source_chunk_id=stored_q["source_chunk_id"],
+                    )
+                    q_obj.bloom_level = classification.level
+                    q_obj.bloom_verb = classification.verb
+                    q_obj.marks = _assign_marks_by_bloom(classification.level)
+                    classified_questions.append(q_obj)
+                # If classification fails, skip the question (strict quality control)
 
         debug_report["bloom_classified"] = len(classified_questions)
         debug_report["bloom_failed"] = len(stored_questions) - len(classified_questions)
+        debug_report["bloom_api_calls_count"] = bloom_api_calls
+        debug_report["bloom_batch_size"] = batch_size
         debug_report["bank_size_total"] = len(classified_questions)
         bank_by_bloom = {}
         bank_by_marks = {}
@@ -182,6 +198,12 @@ def create_app() -> Flask:
             bank_by_marks[q.marks] = bank_by_marks.get(q.marks, 0) + 1
         debug_report["bank_size_by_bloom"] = bank_by_bloom
         debug_report["bank_size_by_marks"] = bank_by_marks
+
+        print(
+            f"[DEBUG] bloom_calls={bloom_api_calls} "
+            f"bloom_batch_size={batch_size} "
+            f"bloom_failed={debug_report['bloom_failed']}"
+        )
 
         if not classified_questions:
             return jsonify({"error": "No questions could be classified with Bloom levels."}), 422

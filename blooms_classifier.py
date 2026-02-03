@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -160,6 +161,99 @@ def _parse_level(text: str) -> Optional[BloomLevel]:
         if re.search(rf"\\b{level}\\b", text, re.IGNORECASE):
             return level  # type: ignore
     return None
+
+
+def _parse_batch_levels(json_text: str, n: int) -> List[Optional[BloomLevel]]:
+    if not json_text or n <= 0:
+        return [None] * max(n, 0)
+
+    try:
+        payload = json.loads(json_text)
+    except Exception:
+        return [None] * n
+
+    if not isinstance(payload, list) or len(payload) != n:
+        return [None] * n
+
+    allowed = {"Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"}
+    results: List[Optional[BloomLevel]] = [None] * n
+    seen = set()
+
+    for item in payload:
+        if not isinstance(item, dict):
+            return [None] * n
+        i = item.get("i")
+        level = item.get("level")
+        if not isinstance(i, int) or i < 1 or i > n or i in seen:
+            return [None] * n
+        if level not in allowed:
+            return [None] * n
+        results[i - 1] = level  # type: ignore
+        seen.add(i)
+
+    if any(level is None for level in results):
+        return [None] * n
+
+    return results
+
+
+def classify_bloom_levels_gpt_batch(
+    questions: List[str],
+) -> List[Optional[BloomClassification]]:
+    """
+    Classify multiple questions in a single GPT call using strict JSON output.
+    """
+    if not questions:
+        return []
+
+    numbered = "\n".join(
+        f"Q{i + 1}. {q.strip()}" for i, q in enumerate(questions)
+    )
+    prompt = (
+        "Classify each question according to Bloom's Taxonomy.\n\n"
+        "Input:\n"
+        f"{numbered}\n\n"
+        "Output: Return ONLY a strict JSON array of objects with keys "
+        '"i" and "level", e.g. '
+        '[{"i":1,"level":"Remember"},{"i":2,"level":"Apply"}]. '
+        "No extra text."
+    )
+
+    client = _get_client()
+
+    try:
+        response = client.chat.completions.create(
+            model=CLASSIFY_MODEL,
+            temperature=0.1,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+        )
+        raw_output = response.choices[0].message.content or ""
+        levels = _parse_batch_levels(raw_output, len(questions))
+    except Exception as e:
+        print(f"Error classifying question batch with GPT: {e}")
+        return [None] * len(questions)
+
+    results: List[Optional[BloomClassification]] = []
+    for question, level in zip(questions, levels):
+        if level is None:
+            results.append(None)
+            continue
+        verb = _extract_leading_verb(question) or ""
+        results.append(
+            BloomClassification(
+                question=question.strip(),
+                level=level,
+                verb=verb,
+                confidence=0.9,
+            )
+        )
+
+    return results
 
 
 def classify_questions_batch(questions: List[str]) -> List[Optional[BloomClassification]]:
