@@ -162,12 +162,69 @@ def create_app() -> Flask:
         # Classify each question and add Bloom level
         classified_questions = []
         batch_size = 15
+        retry_batch_size = 8
         bloom_api_calls = 0
+        bloom_batch_failures = 0
+        bloom_retry_batches = 0
+        bloom_batches_ok = 0
+        bloom_batches_failed = 0
+        bloom_singles_fallback = 0
         for start in range(0, len(stored_questions), batch_size):
             batch = stored_questions[start:start + batch_size]
             batch_texts = [q["text"] for q in batch]
             batch_results = classify_bloom_levels_gpt_batch(batch_texts)
             bloom_api_calls += 1
+
+            if all(result is None for result in batch_results):
+                bloom_batch_failures += 1
+                retry_results = []
+                for retry_start in range(0, len(batch_texts), retry_batch_size):
+                    retry_texts = batch_texts[retry_start:retry_start + retry_batch_size]
+                    retry_batch_results = classify_bloom_levels_gpt_batch(retry_texts)
+                    bloom_api_calls += 1
+                    bloom_retry_batches += 1
+                    retry_results.extend(retry_batch_results)
+
+                if all(result is None for result in retry_results):
+                    bloom_batches_failed += 1
+                    for stored_q in batch:
+                        classification = classify_bloom_level_heuristic(stored_q["text"])
+                        if classification is None:
+                            classification = classify_bloom_level_gpt(stored_q["text"])
+                            bloom_api_calls += 1
+                            bloom_singles_fallback += 1
+                        if classification:
+                            q_obj = Question(
+                                text=stored_q["text"],
+                                source_chunk_id=stored_q["source_chunk_id"],
+                            )
+                            q_obj.bloom_level = classification.level
+                            q_obj.bloom_verb = classification.verb
+                            q_obj.marks = _assign_marks_by_bloom(classification.level)
+                            classified_questions.append(q_obj)
+                    continue
+
+                bloom_batches_ok += 1
+                batch_results = retry_results
+            else:
+                bloom_batches_ok += 1
+
+            # Retry only missing items in micro-batches before falling back to single calls
+            missing_idxs = [i for i, r in enumerate(batch_results) if r is None]
+            if missing_idxs:
+                missing_texts = [batch_texts[i] for i in missing_idxs]
+
+                recovered = []
+                for retry_start in range(0, len(missing_texts), retry_batch_size):
+                    chunk = missing_texts[retry_start:retry_start + retry_batch_size]
+                    rb = classify_bloom_levels_gpt_batch(chunk)
+                    bloom_api_calls += 1
+                    bloom_retry_batches += 1
+                    recovered.extend(rb)
+
+                for idx, rec in zip(missing_idxs, recovered):
+                    if rec is not None:
+                        batch_results[idx] = rec
 
             for stored_q, classification in zip(batch, batch_results):
                 if classification is None:
@@ -175,6 +232,7 @@ def create_app() -> Flask:
                     if classification is None:
                         classification = classify_bloom_level_gpt(stored_q["text"])
                         bloom_api_calls += 1
+                        bloom_singles_fallback += 1
                 if classification:
                     q_obj = Question(
                         text=stored_q["text"],
@@ -190,6 +248,8 @@ def create_app() -> Flask:
         debug_report["bloom_failed"] = len(stored_questions) - len(classified_questions)
         debug_report["bloom_api_calls_count"] = bloom_api_calls
         debug_report["bloom_batch_size"] = batch_size
+        debug_report["bloom_batch_failures"] = bloom_batch_failures
+        debug_report["bloom_retry_batches"] = bloom_retry_batches
         debug_report["bank_size_total"] = len(classified_questions)
         bank_by_bloom = {}
         bank_by_marks = {}
@@ -203,6 +263,11 @@ def create_app() -> Flask:
             f"[DEBUG] bloom_calls={bloom_api_calls} "
             f"bloom_batch_size={batch_size} "
             f"bloom_failed={debug_report['bloom_failed']}"
+        )
+        print(
+            f"[DEBUG] bloom_batches_ok={bloom_batches_ok} "
+            f"bloom_batches_failed={bloom_batches_failed} "
+            f"bloom_singles_fallback={bloom_singles_fallback}"
         )
 
         if not classified_questions:
