@@ -15,7 +15,9 @@ Pipeline:
 
 import json
 import os
-from flask import Flask, render_template, request, jsonify
+from io import BytesIO
+from typing import Any, Callable, Dict, Optional, Tuple
+from flask import Flask, render_template, request, jsonify, redirect, url_for, abort
 
 from pdf_processor import extract_text_from_pdf
 from text_chunker import chunk_text
@@ -31,7 +33,354 @@ from blooms_classifier import (
     classify_bloom_levels_gpt_batch,
 )
 from paper_generator import generate_question_paper
+from jobs import create_job, get_job, update_job, run_in_thread
 
+DEFAULT_BLOOM_DISTRIBUTION = {
+    "Remember": 0.2,
+    "Understand": 0.3,
+    "Apply": 0.3,
+    "Analyze": 0.15,
+    "Evaluate": 0.05,
+    "Create": 0.0,  # Usually not in basic exams
+}
+
+
+def _safe_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed
+
+
+def _parse_settings_from_form(form) -> Dict[str, Any]:
+    total_marks_value = form.get("total_marks")
+    if total_marks_value == "custom":
+        total_marks_value = form.get("total_marks_custom")
+
+    return {
+        "total_marks": _safe_int(total_marks_value, 50),
+        "bloom_remember": form.get("bloom_remember"),
+        "bloom_understand": form.get("bloom_understand"),
+        "bloom_apply": form.get("bloom_apply"),
+        "bloom_analyze": form.get("bloom_analyze"),
+        "bloom_evaluate": form.get("bloom_evaluate"),
+        "bloom_create": form.get("bloom_create"),
+        "include_coding": form.get("include_coding") == "1",
+        "batch_size": _safe_int(form.get("batch_size"), 15),
+        "retry_batch_size": _safe_int(form.get("retry_batch_size"), 8),
+    }
+
+
+def _resolve_total_marks(settings: Optional[Dict[str, Any]]) -> int:
+    if not settings:
+        return 50
+    total_marks = settings.get("total_marks", 50)
+    if not isinstance(total_marks, int) or total_marks <= 0:
+        return 50
+    return total_marks
+
+
+def _resolve_batch_sizes(settings: Optional[Dict[str, Any]]) -> Tuple[int, int]:
+    if not settings:
+        return 15, 8
+    batch_size = settings.get("batch_size", 15)
+    retry_batch_size = settings.get("retry_batch_size", 8)
+    if not isinstance(batch_size, int) or batch_size <= 0:
+        batch_size = 15
+    if not isinstance(retry_batch_size, int) or retry_batch_size <= 0:
+        retry_batch_size = 8
+    return batch_size, retry_batch_size
+
+
+def _parse_bloom_distribution(settings: Optional[Dict[str, Any]]) -> Dict[str, float]:
+    if not settings:
+        return dict(DEFAULT_BLOOM_DISTRIBUTION)
+
+    mapping = {
+        "Remember": "bloom_remember",
+        "Understand": "bloom_understand",
+        "Apply": "bloom_apply",
+        "Analyze": "bloom_analyze",
+        "Evaluate": "bloom_evaluate",
+        "Create": "bloom_create",
+    }
+
+    values: Dict[str, float] = {}
+    total = 0.0
+    for level, key in mapping.items():
+        raw = settings.get(key)
+        try:
+            num = float(raw)
+        except (TypeError, ValueError):
+            return dict(DEFAULT_BLOOM_DISTRIBUTION)
+        if num < 0:
+            num = 0
+        values[level] = num
+        total += num
+
+    if total <= 0:
+        return dict(DEFAULT_BLOOM_DISTRIBUTION)
+
+    return {level: value / total for level, value in values.items()}
+
+
+def _run_pipeline_core(
+    pdf_file,
+    debug_mode: bool,
+    settings: Optional[Dict[str, Any]] = None,
+    progress_cb: Optional[Callable[[str, int], None]] = None,
+    questions_storage: Optional[list] = None,
+) -> Tuple[Dict[str, Any], int]:
+    def report(step: str, progress: int) -> None:
+        if progress_cb:
+            progress_cb(step, progress)
+
+    report("Extracting text", 10)
+    try:
+        # Step 2: PDF Text Extraction
+        raw_text = extract_text_from_pdf(pdf_file)
+    except ValueError as e:
+        return {"error": str(e)}, 400
+    except Exception as e:
+        return {"error": f"Failed to process PDF: {e}"}, 500
+
+    if not raw_text or not raw_text.strip():
+        return {"error": "Extracted syllabus is empty; cannot generate questions."}, 400
+
+    keyword_set = build_keyword_set_from_text(raw_text)
+
+    # Step 3: Text Cleaning + Chunking (500-800 words)
+    report("Chunking text", 20)
+    chunks = chunk_text(raw_text, min_words=500, max_words=800, overlap_words=100)
+
+    if not chunks:
+        return {"error": "Could not chunk syllabus text."}, 400
+
+    batch_size, retry_batch_size = _resolve_batch_sizes(settings)
+    debug_report = {
+        "chunks_created": len(chunks),
+        "chunk_word_counts": [_approx_word_count(chunk) for chunk in chunks][:10],
+        "raw_text_chars": len(raw_text),
+        "raw_text_words": _approx_word_count(raw_text),
+        "bloom_api_calls_count": 0,
+        "bloom_batch_size": batch_size,
+    }
+
+    # Step 4: GPT Question Generation (NO Bloom here)
+    report("Generating questions", 35)
+    all_raw_questions = []
+    raw_questions_per_chunk = {}
+    for chunk_id, chunk in enumerate(chunks):
+        raw_questions = generate_questions_for_chunk(
+            chunk_text=chunk,
+            source_chunk_id=chunk_id,
+        )
+        raw_questions_per_chunk[chunk_id] = len(raw_questions)
+        all_raw_questions.extend(raw_questions)
+
+    if not all_raw_questions:
+        return {"error": "No questions could be generated from the syllabus."}, 422
+
+    debug_report["raw_questions_generated"] = len(all_raw_questions)
+    debug_report["raw_questions_per_chunk"] = raw_questions_per_chunk
+
+    # Convert GeneratedQuestion to Question objects for validation
+    question_objects = [Question(q.text, q.source_chunk_id) for q in all_raw_questions]
+
+    # Step 5: Question Validation (hard rejection rules)
+    report("Validating questions", 50)
+    valid_questions, rejected_items = validate_question_batch_with_report(
+        question_objects,
+        keyword_set=keyword_set,
+    )
+
+    rejection_reasons_count = {}
+    rejection_examples = {}
+    for item in rejected_items:
+        reason = item.get("reason") or "unknown"
+        rejection_reasons_count[reason] = rejection_reasons_count.get(reason, 0) + 1
+        if reason not in rejection_examples:
+            rejection_examples[reason] = []
+        if len(rejection_examples[reason]) < 2:
+            rejection_examples[reason].append(item.get("text", ""))
+
+    debug_report["accepted_questions"] = len(valid_questions)
+    debug_report["rejected_questions"] = len(rejected_items)
+    debug_report["rejection_reasons_count"] = rejection_reasons_count
+    debug_report["rejection_examples"] = rejection_examples
+
+    top_rejections = sorted(
+        rejection_reasons_count.items(),
+        key=lambda item: item[1],
+        reverse=True,
+    )[:3]
+    top_rejections_text = (
+        ", ".join(f"{reason}={count}" for reason, count in top_rejections)
+        if top_rejections
+        else "none"
+    )
+    print(
+        f"[DEBUG] chunks={debug_report['chunks_created']}, "
+        f"raw_generated={debug_report['raw_questions_generated']}, "
+        f"accepted={debug_report['accepted_questions']}, "
+        f"rejected={debug_report['rejected_questions']}"
+    )
+    print(f"[DEBUG] top_rejections: {top_rejections_text}")
+
+    if not valid_questions:
+        return {"error": "No valid questions passed validation."}, 422
+
+    # Step 6: Question Storage (JSON format)
+    # Store questions with their text and source info
+    stored_questions = []
+    for q in valid_questions:
+        stored_questions.append({
+            "text": q.text,
+            "source_chunk_id": q.source_chunk_id,
+        })
+
+    # Step 7: GPT Bloom Classification (separate call)
+    # Classify each question and add Bloom level
+    report("Classifying Bloom levels", 70)
+    classified_questions = []
+    bloom_api_calls = 0
+    bloom_batch_failures = 0
+    bloom_retry_batches = 0
+    bloom_batches_ok = 0
+    bloom_batches_failed = 0
+    bloom_singles_fallback = 0
+    for start in range(0, len(stored_questions), batch_size):
+        batch = stored_questions[start:start + batch_size]
+        batch_texts = [q["text"] for q in batch]
+        batch_results = classify_bloom_levels_gpt_batch(batch_texts)
+        bloom_api_calls += 1
+
+        if all(result is None for result in batch_results):
+            bloom_batch_failures += 1
+            retry_results = []
+            for retry_start in range(0, len(batch_texts), retry_batch_size):
+                retry_texts = batch_texts[retry_start:retry_start + retry_batch_size]
+                retry_batch_results = classify_bloom_levels_gpt_batch(retry_texts)
+                bloom_api_calls += 1
+                bloom_retry_batches += 1
+                retry_results.extend(retry_batch_results)
+
+            if all(result is None for result in retry_results):
+                bloom_batches_failed += 1
+                for stored_q in batch:
+                    classification = classify_bloom_level_heuristic(stored_q["text"])
+                    if classification is None:
+                        classification = classify_bloom_level_gpt(stored_q["text"])
+                        bloom_api_calls += 1
+                        bloom_singles_fallback += 1
+                    if classification:
+                        q_obj = Question(
+                            text=stored_q["text"],
+                            source_chunk_id=stored_q["source_chunk_id"],
+                        )
+                        q_obj.bloom_level = classification.level
+                        q_obj.bloom_verb = classification.verb
+                        q_obj.marks = _assign_marks_by_bloom(classification.level)
+                        classified_questions.append(q_obj)
+                continue
+
+            bloom_batches_ok += 1
+            batch_results = retry_results
+        else:
+            bloom_batches_ok += 1
+
+        # Retry only missing items in micro-batches before falling back to single calls
+        missing_idxs = [i for i, r in enumerate(batch_results) if r is None]
+        if missing_idxs:
+            missing_texts = [batch_texts[i] for i in missing_idxs]
+
+            recovered = []
+            for retry_start in range(0, len(missing_texts), retry_batch_size):
+                chunk = missing_texts[retry_start:retry_start + retry_batch_size]
+                rb = classify_bloom_levels_gpt_batch(chunk)
+                bloom_api_calls += 1
+                bloom_retry_batches += 1
+                recovered.extend(rb)
+
+            for idx, rec in zip(missing_idxs, recovered):
+                if rec is not None:
+                    batch_results[idx] = rec
+
+        for stored_q, classification in zip(batch, batch_results):
+            if classification is None:
+                classification = classify_bloom_level_heuristic(stored_q["text"])
+                if classification is None:
+                    classification = classify_bloom_level_gpt(stored_q["text"])
+                    bloom_api_calls += 1
+                    bloom_singles_fallback += 1
+            if classification:
+                q_obj = Question(
+                    text=stored_q["text"],
+                    source_chunk_id=stored_q["source_chunk_id"],
+                )
+                q_obj.bloom_level = classification.level
+                q_obj.bloom_verb = classification.verb
+                q_obj.marks = _assign_marks_by_bloom(classification.level)
+                classified_questions.append(q_obj)
+            # If classification fails, skip the question (strict quality control)
+
+    debug_report["bloom_classified"] = len(classified_questions)
+    debug_report["bloom_failed"] = len(stored_questions) - len(classified_questions)
+    debug_report["bloom_api_calls_count"] = bloom_api_calls
+    debug_report["bloom_batch_size"] = batch_size
+    debug_report["bloom_batch_failures"] = bloom_batch_failures
+    debug_report["bloom_retry_batches"] = bloom_retry_batches
+    debug_report["bank_size_total"] = len(classified_questions)
+    bank_by_bloom = {}
+    bank_by_marks = {}
+    for q in classified_questions:
+        bank_by_bloom[q.bloom_level] = bank_by_bloom.get(q.bloom_level, 0) + 1
+        bank_by_marks[q.marks] = bank_by_marks.get(q.marks, 0) + 1
+    debug_report["bank_size_by_bloom"] = bank_by_bloom
+    debug_report["bank_size_by_marks"] = bank_by_marks
+
+    print(
+        f"[DEBUG] bloom_calls={bloom_api_calls} "
+        f"bloom_batch_size={batch_size} "
+        f"bloom_failed={debug_report['bloom_failed']}"
+    )
+    print(
+        f"[DEBUG] bloom_batches_ok={bloom_batches_ok} "
+        f"bloom_batches_failed={bloom_batches_failed} "
+        f"bloom_singles_fallback={bloom_singles_fallback}"
+    )
+
+    if not classified_questions:
+        return {"error": "No questions could be classified with Bloom levels."}, 422
+
+    # Step 8: Constraint-Based Paper Generation
+    # Default constraints (can be made configurable via UI later)
+    report("Generating paper", 85)
+    total_marks = _resolve_total_marks(settings)
+    bloom_distribution = _parse_bloom_distribution(settings)
+
+    try:
+        paper = generate_question_paper(
+            pool=classified_questions,
+            total_marks=total_marks,
+            bloom_distribution=bloom_distribution,
+        )
+    except ValueError as e:
+        return {"error": f"Could not generate paper: {e}"}, 422
+
+    debug_report["paper_total_marks_target"] = total_marks
+    debug_report["paper_questions_selected"] = len(paper.get("questions", [])) if paper else 0
+
+    # Step 9: Review & Export (return JSON)
+    # Store the generated paper
+    if questions_storage is not None:
+        questions_storage.append(paper)
+
+    report("Done", 100)
+    if debug_mode:
+        return {"paper": paper, "debug": debug_report}, 200
+    return paper, 200
 
 def create_app() -> Flask:
     """Application factory."""
@@ -44,6 +393,79 @@ def create_app() -> Flask:
     def index():
         """Upload and configuration page."""
         return render_template("index.html")
+
+    def run_pipeline_job(job_id: str, pdf_bytes: bytes, settings: Dict[str, Any]) -> Dict[str, Any]:
+        def report(step: str, progress: int) -> None:
+            update_job(job_id, step=step, progress=progress)
+
+        update_job(job_id, step="Starting", progress=5)
+        with BytesIO(pdf_bytes) as pdf_file:
+            result, status_code = _run_pipeline_core(
+                pdf_file,
+                debug_mode=True,
+                settings=settings,
+                progress_cb=report,
+                questions_storage=questions_storage,
+            )
+        if status_code != 200:
+            raise RuntimeError(result.get("error", "Pipeline failed"))
+        return result
+
+    @app.route("/generate", methods=["POST"])
+    def generate_ui():
+        if "syllabus_pdf" not in request.files:
+            return render_template("index.html", error="No PDF uploaded"), 400
+
+        pdf_file = request.files["syllabus_pdf"]
+        if pdf_file.filename == "":
+            return render_template("index.html", error="Empty filename"), 400
+
+        pdf_bytes = pdf_file.read()
+        if not pdf_bytes:
+            return render_template("index.html", error="Empty PDF file"), 400
+
+        settings = _parse_settings_from_form(request.form)
+        job = create_job()
+        run_in_thread(job.id, run_pipeline_job, job.id, pdf_bytes, settings)
+        return redirect(url_for("status", job_id=job.id))
+
+    @app.route("/status/<job_id>", methods=["GET"])
+    def status(job_id: str):
+        if not get_job(job_id):
+            abort(404)
+        return render_template("status.html", job_id=job_id)
+
+    @app.route("/api/status/<job_id>", methods=["GET"])
+    def api_status(job_id: str):
+        job = get_job(job_id)
+        if not job:
+            return jsonify({"error": "Job not found"}), 404
+        return jsonify({
+            "id": job.id,
+            "status": job.status,
+            "step": job.step,
+            "progress": job.progress,
+            "error": job.error,
+            "has_result": job.result is not None,
+        })
+
+    @app.route("/result/<job_id>", methods=["GET"])
+    def result(job_id: str):
+        job = get_job(job_id)
+        if not job:
+            abort(404)
+        if job.status != "done":
+            return redirect(url_for("status", job_id=job_id))
+        payload = job.result or {}
+        paper = payload.get("paper") if isinstance(payload, dict) else None
+        debug = payload.get("debug") if isinstance(payload, dict) else None
+        return render_template(
+            "result.html",
+            result=payload,
+            paper=paper,
+            debug=debug,
+            job_id=job_id,
+        )
 
     @app.route("/api/generate", methods=["POST"])
     def api_generate():
@@ -58,252 +480,14 @@ def create_app() -> Flask:
         pdf_file = request.files["syllabus_pdf"]
         if pdf_file.filename == "":
             return jsonify({"error": "Empty filename"}), 400
-
-        try:
-            # Step 2: PDF Text Extraction
-            raw_text = extract_text_from_pdf(pdf_file)
-        except ValueError as e:
-            return jsonify({"error": str(e)}), 400
-        except Exception as e:
-            return jsonify({"error": f"Failed to process PDF: {e}"}), 500
-
-        if not raw_text or not raw_text.strip():
-            return jsonify({"error": "Extracted syllabus is empty; cannot generate questions."}), 400
-
-        keyword_set = build_keyword_set_from_text(raw_text)
-
-        # Step 3: Text Cleaning + Chunking (500-800 words)
-        chunks = chunk_text(raw_text, min_words=500, max_words=800, overlap_words=100)
-        
-        if not chunks:
-            return jsonify({"error": "Could not chunk syllabus text."}), 400
-
-        debug_report = {
-            "chunks_created": len(chunks),
-            "chunk_word_counts": [_approx_word_count(chunk) for chunk in chunks][:10],
-            "raw_text_chars": len(raw_text),
-            "raw_text_words": _approx_word_count(raw_text),
-            "bloom_api_calls_count": 0,
-            "bloom_batch_size": 15,
-        }
-
-        # Step 4: GPT Question Generation (NO Bloom here)
-        all_raw_questions = []
-        raw_questions_per_chunk = {}
-        for chunk_id, chunk in enumerate(chunks):
-            raw_questions = generate_questions_for_chunk(
-                chunk_text=chunk,
-                source_chunk_id=chunk_id,
-            )
-            raw_questions_per_chunk[chunk_id] = len(raw_questions)
-            all_raw_questions.extend(raw_questions)
-
-        if not all_raw_questions:
-            return jsonify({"error": "No questions could be generated from the syllabus."}), 422
-
-        debug_report["raw_questions_generated"] = len(all_raw_questions)
-        debug_report["raw_questions_per_chunk"] = raw_questions_per_chunk
-
-        # Convert GeneratedQuestion to Question objects for validation
-        question_objects = [Question(q.text, q.source_chunk_id) for q in all_raw_questions]
-
-        # Step 5: Question Validation (hard rejection rules)
-        valid_questions, rejected_items = validate_question_batch_with_report(
-            question_objects,
-            keyword_set=keyword_set,
+        payload, status_code = _run_pipeline_core(
+            pdf_file,
+            debug_mode=debug_mode,
+            settings=None,
+            progress_cb=None,
+            questions_storage=questions_storage,
         )
-
-        rejection_reasons_count = {}
-        rejection_examples = {}
-        for item in rejected_items:
-            reason = item.get("reason") or "unknown"
-            rejection_reasons_count[reason] = rejection_reasons_count.get(reason, 0) + 1
-            if reason not in rejection_examples:
-                rejection_examples[reason] = []
-            if len(rejection_examples[reason]) < 2:
-                rejection_examples[reason].append(item.get("text", ""))
-
-        debug_report["accepted_questions"] = len(valid_questions)
-        debug_report["rejected_questions"] = len(rejected_items)
-        debug_report["rejection_reasons_count"] = rejection_reasons_count
-        debug_report["rejection_examples"] = rejection_examples
-
-        top_rejections = sorted(
-            rejection_reasons_count.items(),
-            key=lambda item: item[1],
-            reverse=True,
-        )[:3]
-        top_rejections_text = (
-            ", ".join(f"{reason}={count}" for reason, count in top_rejections)
-            if top_rejections
-            else "none"
-        )
-        print(
-            f"[DEBUG] chunks={debug_report['chunks_created']}, "
-            f"raw_generated={debug_report['raw_questions_generated']}, "
-            f"accepted={debug_report['accepted_questions']}, "
-            f"rejected={debug_report['rejected_questions']}"
-        )
-        print(f"[DEBUG] top_rejections: {top_rejections_text}")
-
-        if not valid_questions:
-            return jsonify({"error": "No valid questions passed validation."}), 422
-
-        # Step 6: Question Storage (JSON format)
-        # Store questions with their text and source info
-        stored_questions = []
-        for q in valid_questions:
-            stored_questions.append({
-                "text": q.text,
-                "source_chunk_id": q.source_chunk_id,
-            })
-        
-        # Step 7: GPT Bloom Classification (separate call)
-        # Classify each question and add Bloom level
-        classified_questions = []
-        batch_size = 15
-        retry_batch_size = 8
-        bloom_api_calls = 0
-        bloom_batch_failures = 0
-        bloom_retry_batches = 0
-        bloom_batches_ok = 0
-        bloom_batches_failed = 0
-        bloom_singles_fallback = 0
-        for start in range(0, len(stored_questions), batch_size):
-            batch = stored_questions[start:start + batch_size]
-            batch_texts = [q["text"] for q in batch]
-            batch_results = classify_bloom_levels_gpt_batch(batch_texts)
-            bloom_api_calls += 1
-
-            if all(result is None for result in batch_results):
-                bloom_batch_failures += 1
-                retry_results = []
-                for retry_start in range(0, len(batch_texts), retry_batch_size):
-                    retry_texts = batch_texts[retry_start:retry_start + retry_batch_size]
-                    retry_batch_results = classify_bloom_levels_gpt_batch(retry_texts)
-                    bloom_api_calls += 1
-                    bloom_retry_batches += 1
-                    retry_results.extend(retry_batch_results)
-
-                if all(result is None for result in retry_results):
-                    bloom_batches_failed += 1
-                    for stored_q in batch:
-                        classification = classify_bloom_level_heuristic(stored_q["text"])
-                        if classification is None:
-                            classification = classify_bloom_level_gpt(stored_q["text"])
-                            bloom_api_calls += 1
-                            bloom_singles_fallback += 1
-                        if classification:
-                            q_obj = Question(
-                                text=stored_q["text"],
-                                source_chunk_id=stored_q["source_chunk_id"],
-                            )
-                            q_obj.bloom_level = classification.level
-                            q_obj.bloom_verb = classification.verb
-                            q_obj.marks = _assign_marks_by_bloom(classification.level)
-                            classified_questions.append(q_obj)
-                    continue
-
-                bloom_batches_ok += 1
-                batch_results = retry_results
-            else:
-                bloom_batches_ok += 1
-
-            # Retry only missing items in micro-batches before falling back to single calls
-            missing_idxs = [i for i, r in enumerate(batch_results) if r is None]
-            if missing_idxs:
-                missing_texts = [batch_texts[i] for i in missing_idxs]
-
-                recovered = []
-                for retry_start in range(0, len(missing_texts), retry_batch_size):
-                    chunk = missing_texts[retry_start:retry_start + retry_batch_size]
-                    rb = classify_bloom_levels_gpt_batch(chunk)
-                    bloom_api_calls += 1
-                    bloom_retry_batches += 1
-                    recovered.extend(rb)
-
-                for idx, rec in zip(missing_idxs, recovered):
-                    if rec is not None:
-                        batch_results[idx] = rec
-
-            for stored_q, classification in zip(batch, batch_results):
-                if classification is None:
-                    classification = classify_bloom_level_heuristic(stored_q["text"])
-                    if classification is None:
-                        classification = classify_bloom_level_gpt(stored_q["text"])
-                        bloom_api_calls += 1
-                        bloom_singles_fallback += 1
-                if classification:
-                    q_obj = Question(
-                        text=stored_q["text"],
-                        source_chunk_id=stored_q["source_chunk_id"],
-                    )
-                    q_obj.bloom_level = classification.level
-                    q_obj.bloom_verb = classification.verb
-                    q_obj.marks = _assign_marks_by_bloom(classification.level)
-                    classified_questions.append(q_obj)
-                # If classification fails, skip the question (strict quality control)
-
-        debug_report["bloom_classified"] = len(classified_questions)
-        debug_report["bloom_failed"] = len(stored_questions) - len(classified_questions)
-        debug_report["bloom_api_calls_count"] = bloom_api_calls
-        debug_report["bloom_batch_size"] = batch_size
-        debug_report["bloom_batch_failures"] = bloom_batch_failures
-        debug_report["bloom_retry_batches"] = bloom_retry_batches
-        debug_report["bank_size_total"] = len(classified_questions)
-        bank_by_bloom = {}
-        bank_by_marks = {}
-        for q in classified_questions:
-            bank_by_bloom[q.bloom_level] = bank_by_bloom.get(q.bloom_level, 0) + 1
-            bank_by_marks[q.marks] = bank_by_marks.get(q.marks, 0) + 1
-        debug_report["bank_size_by_bloom"] = bank_by_bloom
-        debug_report["bank_size_by_marks"] = bank_by_marks
-
-        print(
-            f"[DEBUG] bloom_calls={bloom_api_calls} "
-            f"bloom_batch_size={batch_size} "
-            f"bloom_failed={debug_report['bloom_failed']}"
-        )
-        print(
-            f"[DEBUG] bloom_batches_ok={bloom_batches_ok} "
-            f"bloom_batches_failed={bloom_batches_failed} "
-            f"bloom_singles_fallback={bloom_singles_fallback}"
-        )
-
-        if not classified_questions:
-            return jsonify({"error": "No questions could be classified with Bloom levels."}), 422
-
-        # Step 8: Constraint-Based Paper Generation
-        # Default constraints (can be made configurable via UI later)
-        total_marks = 50
-        bloom_distribution = {
-            "Remember": 0.2,
-            "Understand": 0.3,
-            "Apply": 0.3,
-            "Analyze": 0.15,
-            "Evaluate": 0.05,
-            "Create": 0.0,  # Usually not in basic exams
-        }
-
-        try:
-            paper = generate_question_paper(
-                pool=classified_questions,
-                total_marks=total_marks,
-                bloom_distribution=bloom_distribution,
-            )
-        except ValueError as e:
-            return jsonify({"error": f"Could not generate paper: {e}"}), 422
-        
-        debug_report["paper_total_marks_target"] = total_marks
-        debug_report["paper_questions_selected"] = len(paper.get("questions", [])) if paper else 0
-
-        # Step 9: Review & Export (return JSON)
-        # Store the generated paper
-        questions_storage.append(paper)
-        
-        if debug_mode:
-            return jsonify({"paper": paper, "debug": debug_report}), 200
-        return jsonify(paper), 200
+        return jsonify(payload), status_code
 
     @app.route("/api/questions", methods=["GET"])
     def api_get_questions():

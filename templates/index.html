@@ -1,84 +1,150 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>BLOOMS BOT - Question Paper Generator</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
-  </head>
-  <body>
-    <div class="container">
-      <h1>BLOOMS BOT</h1>
-      <p class="subtitle">
-        PDF-based Bloom's Taxonomy aligned question paper generator
-      </p>
+{% extends "base.html" %}
 
-      <form id="generate-form">
-        <label for="syllabus_pdf">Upload syllabus / lecture notes (PDF):</label>
-        <input type="file" id="syllabus_pdf" name="syllabus_pdf" accept="application/pdf" required />
+{% block content %}
+  <section class="card">
+    <h1>Generate a Question Paper</h1>
+    <p class="muted">Upload a PDF syllabus and tune the distribution to shape your paper.</p>
+    {% if error %}
+      <div class="error-box">{{ error }}</div>
+    {% endif %}
 
-        <label>
-          <input type="checkbox" id="debug_mode" />
-          Include debug report
-        </label>
+    <form class="form" method="post" action="{{ url_for('generate_ui') }}" enctype="multipart/form-data">
+      <div class="field">
+        <label for="pdf">Syllabus PDF</label>
+        <input id="pdf" name="syllabus_pdf" type="file" accept="application/pdf" required />
+      </div>
 
-        <button type="submit">Generate Question Paper</button>
-      </form>
+      <div class="grid two">
+        <div class="field">
+          <label for="total-marks">Total Marks</label>
+          <select id="total-marks" name="total_marks">
+            <option value="50" selected>50</option>
+            <option value="75">75</option>
+            <option value="100">100</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="field" id="custom-marks-wrap" style="display: none;">
+          <label for="total-marks-custom">Custom Marks</label>
+          <input id="total-marks-custom" name="total_marks_custom" type="number" min="10" step="1" placeholder="e.g. 60" />
+        </div>
+      </div>
 
-      <div id="status"></div>
+      <div class="field">
+        <label for="preset">Preset</label>
+        <select id="preset">
+          <option value="">Balanced (default)</option>
+          <option value="easy">Easy</option>
+          <option value="application">Application-heavy</option>
+          <option value="higher">Higher-order</option>
+        </select>
+      </div>
 
-      <pre id="result" class="result"></pre>
-    </div>
+      <div class="field">
+        <label>Bloom Distribution <span class="muted">(sum to 100)</span></label>
+        <div class="grid three">
+          <div class="field compact">
+            <label for="bloom-remember">Remember</label>
+            <input id="bloom-remember" name="bloom_remember" type="number" min="0" max="100" step="1" value="20" />
+          </div>
+          <div class="field compact">
+            <label for="bloom-understand">Understand</label>
+            <input id="bloom-understand" name="bloom_understand" type="number" min="0" max="100" step="1" value="30" />
+          </div>
+          <div class="field compact">
+            <label for="bloom-apply">Apply</label>
+            <input id="bloom-apply" name="bloom_apply" type="number" min="0" max="100" step="1" value="30" />
+          </div>
+          <div class="field compact">
+            <label for="bloom-analyze">Analyze</label>
+            <input id="bloom-analyze" name="bloom_analyze" type="number" min="0" max="100" step="1" value="15" />
+          </div>
+          <div class="field compact">
+            <label for="bloom-evaluate">Evaluate</label>
+            <input id="bloom-evaluate" name="bloom_evaluate" type="number" min="0" max="100" step="1" value="5" />
+          </div>
+          <div class="field compact">
+            <label for="bloom-create">Create</label>
+            <input id="bloom-create" name="bloom_create" type="number" min="0" max="100" step="1" value="0" />
+          </div>
+        </div>
+        <div class="hint" id="bloom-sum">Sum: 100</div>
+      </div>
 
-    <script>
-      const form = document.getElementById("generate-form");
-      const statusEl = document.getElementById("status");
-      const resultEl = document.getElementById("result");
+      <div class="field inline">
+        <input id="include-coding" name="include_coding" type="checkbox" value="1" />
+        <label for="include-coding">Include coding questions</label>
+      </div>
 
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        statusEl.textContent = "Generating questions. This may take a moment...";
-        resultEl.textContent = "";
+      <details class="details">
+        <summary>Advanced settings</summary>
+        <div class="grid two">
+          <div class="field compact">
+            <label for="batch-size">Batch size</label>
+            <input id="batch-size" name="batch_size" type="number" min="1" step="1" value="15" />
+          </div>
+          <div class="field compact">
+            <label for="retry-batch-size">Retry batch size</label>
+            <input id="retry-batch-size" name="retry_batch_size" type="number" min="1" step="1" value="8" />
+          </div>
+        </div>
+      </details>
 
-        const fileInput = document.getElementById("syllabus_pdf");
-        if (!fileInput.files.length) {
-          statusEl.textContent = "Please select a PDF file.";
-          return;
-        }
+      <button class="btn" type="submit">Generate Paper</button>
+    </form>
+  </section>
 
-        const formData = new FormData();
-        formData.append("syllabus_pdf", fileInput.files[0]);
-        const debugMode = document.getElementById("debug_mode").checked;
-        const url = debugMode ? "/api/generate?debug=1" : "/api/generate";
+  <script>
+    const presetSelect = document.getElementById("preset");
+    const bloomFields = {
+      remember: document.getElementById("bloom-remember"),
+      understand: document.getElementById("bloom-understand"),
+      apply: document.getElementById("bloom-apply"),
+      analyze: document.getElementById("bloom-analyze"),
+      evaluate: document.getElementById("bloom-evaluate"),
+      create: document.getElementById("bloom-create"),
+    };
 
-        try {
-          const resp = await fetch(url, {
-            method: "POST",
-            body: formData,
-          });
+    const presets = {
+      "": { remember: 20, understand: 30, apply: 30, analyze: 15, evaluate: 5, create: 0 },
+      easy: { remember: 30, understand: 35, apply: 20, analyze: 10, evaluate: 5, create: 0 },
+      application: { remember: 15, understand: 20, apply: 40, analyze: 20, evaluate: 5, create: 0 },
+      higher: { remember: 10, understand: 20, apply: 25, analyze: 25, evaluate: 15, create: 5 },
+    };
 
-          const data = await resp.json();
-          if (!resp.ok) {
-            statusEl.textContent = "Error: " + (data.error || "Unknown error");
-            return;
-          }
+    function updateBloomSum() {
+      const sum =
+        (parseInt(bloomFields.remember.value || 0, 10)) +
+        (parseInt(bloomFields.understand.value || 0, 10)) +
+        (parseInt(bloomFields.apply.value || 0, 10)) +
+        (parseInt(bloomFields.analyze.value || 0, 10)) +
+        (parseInt(bloomFields.evaluate.value || 0, 10)) +
+        (parseInt(bloomFields.create.value || 0, 10));
+      document.getElementById("bloom-sum").textContent = `Sum: ${sum}`;
+    }
 
-          if (data.debug) {
-            const dbg = data.debug;
-            statusEl.textContent =
-              "Generation complete. " +
-              `chunks=${dbg.chunks_created}, raw_generated=${dbg.raw_questions_generated}, ` +
-              `accepted=${dbg.accepted_questions}, rejected=${dbg.rejected_questions}`;
-          } else {
-            statusEl.textContent = "Generation complete.";
-          }
-          resultEl.textContent = JSON.stringify(data, null, 2);
-        } catch (err) {
-          console.error(err);
-          statusEl.textContent = "Network or server error.";
-        }
+    presetSelect.addEventListener("change", () => {
+      const preset = presets[presetSelect.value || ""];
+      if (!preset) return;
+      Object.keys(preset).forEach((key) => {
+        bloomFields[key].value = preset[key];
       });
-    </script>
-  </body>
-</html>
+      updateBloomSum();
+    });
 
+    Object.values(bloomFields).forEach((field) => {
+      field.addEventListener("input", updateBloomSum);
+    });
+    updateBloomSum();
 
+    const totalMarksSelect = document.getElementById("total-marks");
+    const customMarksWrap = document.getElementById("custom-marks-wrap");
+    const customMarksInput = document.getElementById("total-marks-custom");
+
+    totalMarksSelect.addEventListener("change", () => {
+      const isCustom = totalMarksSelect.value === "custom";
+      customMarksWrap.style.display = isCustom ? "block" : "none";
+      customMarksInput.required = isCustom;
+    });
+  </script>
+{% endblock %}

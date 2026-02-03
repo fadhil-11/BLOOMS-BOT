@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="card">
+    <h1>Generating Paper</h1>
+    <p class="status-pill" id="status-step">Starting...</p>
+
+    <div class="progress">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+
+    <div class="status-row">
+      <span class="muted" id="status-text">Queued</span>
+      <span class="muted" id="status-percent">0%</span>
+    </div>
+
+    <div class="error-box" id="error-box" style="display: none;"></div>
+  </section>
+
+  <script>
+    const jobId = "{{ job_id }}";
+    const statusUrl = "{{ url_for('api_status', job_id=job_id) }}";
+    const resultUrl = "{{ url_for('result', job_id=job_id) }}";
+
+    const stepEl = document.getElementById("status-step");
+    const statusEl = document.getElementById("status-text");
+    const percentEl = document.getElementById("status-percent");
+    const barEl = document.getElementById("progress-bar");
+    const errorBox = document.getElementById("error-box");
+
+    async function poll() {
+      try {
+        const res = await fetch(statusUrl);
+        if (!res.ok) return;
+        const data = await res.json();
+        stepEl.textContent = data.step || "Working...";
+        statusEl.textContent = data.status || "running";
+        const progress = Math.min(100, Math.max(0, data.progress || 0));
+        percentEl.textContent = `${progress}%`;
+        barEl.style.width = `${progress}%`;
+
+        if (data.status === "done") {
+          window.location.href = resultUrl;
+        }
+        if (data.status === "error") {
+          errorBox.style.display = "block";
+          errorBox.textContent = data.error || "Unknown error.";
+        }
+      } catch (err) {
+        // silent retry
+      }
+    }
+
+    poll();
+    setInterval(poll, 1000);
+  </script>
+{% endblock %}

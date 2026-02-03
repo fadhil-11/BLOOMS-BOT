@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="card">
+    <h1>Paper Ready</h1>
+    {% if paper %}
+      <div class="summary">
+        <div>
+          <div class="summary-label">Total Marks</div>
+          <div class="summary-value">{{ paper.total_marks }}</div>
+        </div>
+        <div>
+          <div class="summary-label">Questions</div>
+          <div class="summary-value">{{ paper.questions | length }}</div>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+
+  {% if paper %}
+    <section class="card">
+      <h2>Questions Preview</h2>
+      <ol class="question-list">
+        {% for q in paper.questions %}
+          <li>
+            <div class="question-row">
+              <div class="question-text">{{ q.text }}</div>
+              <div class="question-meta">
+                <span class="badge marks">{{ q.marks }} marks</span>
+                <span class="badge bloom">{{ q.bloom_level }}</span>
+                <span class="badge chunk">Chunk {{ q.source_chunk_id }}</span>
+              </div>
+            </div>
+          </li>
+        {% endfor %}
+      </ol>
+    </section>
+  {% else %}
+    <section class="card">
+      <p>No paper was generated.</p>
+    </section>
+  {% endif %}
+
+  <section class="card">
+    <div class="button-row">
+      <a class="btn" href="{{ url_for('index') }}">Generate Another</a>
+      <button class="btn secondary" disabled title="Coming soon">Download PDF</button>
+    </div>
+  </section>
+
+  {% if debug %}
+    <section class="card">
+      <details>
+        <summary>Debug JSON</summary>
+        <pre class="code">{{ debug | tojson(indent=2) }}</pre>
+      </details>
+    </section>
+  {% endif %}
+{% endblock %}
