@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>BLOOMS BOT - Question Paper Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>BLOOMS BOT</h1>
+      <p class="subtitle">
+        PDF-based Bloom's Taxonomy aligned question paper generator
+      </p>
+
+      <form id="generate-form">
+        <label for="syllabus_pdf">Upload syllabus / lecture notes (PDF):</label>
+        <input type="file" id="syllabus_pdf" name="syllabus_pdf" accept="application/pdf" required />
+
+        <label>
+          <input type="checkbox" id="debug_mode" />
+          Include debug report
+        </label>
+
+        <button type="submit">Generate Question Paper</button>
+      </form>
+
+      <div id="status"></div>
+
+      <pre id="result" class="result"></pre>
+    </div>
+
+    <script>
+      const form = document.getElementById("generate-form");
+      const statusEl = document.getElementById("status");
+      const resultEl = document.getElementById("result");
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        statusEl.textContent = "Generating questions. This may take a moment...";
+        resultEl.textContent = "";
+
+        const fileInput = document.getElementById("syllabus_pdf");
+        if (!fileInput.files.length) {
+          statusEl.textContent = "Please select a PDF file.";
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("syllabus_pdf", fileInput.files[0]);
+        const debugMode = document.getElementById("debug_mode").checked;
+        const url = debugMode ? "/api/generate?debug=1" : "/api/generate";
+
+        try {
+          const resp = await fetch(url, {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await resp.json();
+          if (!resp.ok) {
+            statusEl.textContent = "Error: " + (data.error || "Unknown error");
+            return;
+          }
+
+          if (data.debug) {
+            const dbg = data.debug;
+            statusEl.textContent =
+              "Generation complete. " +
+              `chunks=${dbg.chunks_created}, raw_generated=${dbg.raw_questions_generated}, ` +
+              `accepted=${dbg.accepted_questions}, rejected=${dbg.rejected_questions}`;
+          } else {
+            statusEl.textContent = "Generation complete.";
+          }
+          resultEl.textContent = JSON.stringify(data, null, 2);
+        } catch (err) {
+          console.error(err);
+          statusEl.textContent = "Network or server error.";
+        }
+      });
+    </script>
+  </body>
+</html>
+
+
