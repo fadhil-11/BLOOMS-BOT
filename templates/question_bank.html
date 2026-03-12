@@ -1,0 +1,93 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+  <section class="panel">
+    <div class="panel-header split">
+      <div>
+        <h2>Question Bank</h2>
+        <p class="muted">Browse, edit, and curate validated questions.</p>
+      </div>
+      <button class="btn primary" type="button" id="qb-add">Add Question</button>
+    </div>
+
+    <div class="filters">
+      <select id="qb-course" class="select"></select>
+      <select id="qb-topic" class="select"></select>
+      <select id="qb-bloom" class="select">
+        <option value="">All Bloom Levels</option>
+        <option value="Remember">Remember</option>
+        <option value="Understand">Understand</option>
+        <option value="Apply">Apply</option>
+        <option value="Analyze">Analyze</option>
+        <option value="Evaluate">Evaluate</option>
+        <option value="Create">Create</option>
+      </select>
+      <select id="qb-difficulty" class="select">
+        <option value="">All Difficulty</option>
+        <option value="easy">Easy</option>
+        <option value="medium">Medium</option>
+        <option value="hard">Hard</option>
+      </select>
+      <input id="qb-search" type="search" placeholder="Search question text" />
+      <button class="btn ghost" type="button" id="qb-refresh">Filter</button>
+    </div>
+
+    <div class="table" id="qb-table"></div>
+  </section>
+
+  <div class="modal" data-modal="question">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="qb-modal-title">Add Question</h3>
+        <button class="icon-btn" type="button" data-modal-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="qb-form-course">Course</label>
+          <select id="qb-form-course" class="select"></select>
+        </div>
+        <div class="form-group">
+          <label for="qb-form-topic">Topic</label>
+          <select id="qb-form-topic" class="select"></select>
+        </div>
+        <div class="form-group">
+          <label for="qb-form-text">Question Text</label>
+          <textarea id="qb-form-text" rows="4"></textarea>
+        </div>
+        <div class="form-grid two">
+          <div class="form-group">
+            <label for="qb-form-marks">Marks</label>
+            <input id="qb-form-marks" type="number" min="1" step="1" />
+          </div>
+          <div class="form-group">
+            <label for="qb-form-difficulty">Difficulty</label>
+            <select id="qb-form-difficulty" class="select">
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="qb-form-bloom">Bloom Level</label>
+            <select id="qb-form-bloom" class="select">
+              <option value="Remember">Remember</option>
+              <option value="Understand">Understand</option>
+              <option value="Apply">Apply</option>
+              <option value="Analyze">Analyze</option>
+              <option value="Evaluate">Evaluate</option>
+              <option value="Create">Create</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="qb-form-verb">Bloom Verb</label>
+            <input id="qb-form-verb" type="text" placeholder="Explain" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn secondary" type="button" data-modal-close>Cancel</button>
+        <button class="btn primary" type="button" id="qb-save">Save</button>
+      </div>
+    </div>
+  </div>
+{% endblock %}

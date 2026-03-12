@@ -1,0 +1,77 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+  <section class="grid two-col">
+    <div class="panel">
+      <div class="panel-header split">
+        <div>
+          <h2>Courses</h2>
+          <p class="muted">Manage course metadata and syllabus status.</p>
+        </div>
+        <button class="btn primary" type="button" id="course-add">Add Course</button>
+      </div>
+      <div class="list" id="course-list"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header split">
+        <div>
+          <h2>Topics / Units</h2>
+          <p class="muted">Organize topics under the selected course.</p>
+        </div>
+        <button class="btn ghost" type="button" id="topic-add">Add Topic</button>
+      </div>
+      <div class="list" id="topic-list"></div>
+    </div>
+  </section>
+
+  <div class="modal" data-modal="course">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="course-modal-title">Add Course</h3>
+        <button class="icon-btn" type="button" data-modal-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="course-modal-name">Course Name</label>
+          <input id="course-modal-name" type="text" />
+        </div>
+        <div class="form-group">
+          <label for="course-modal-dept">Department</label>
+          <input id="course-modal-dept" type="text" />
+        </div>
+        <div class="form-group">
+          <label for="course-modal-sem">Semester</label>
+          <input id="course-modal-sem" type="text" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn secondary" type="button" data-modal-close>Cancel</button>
+        <button class="btn primary" type="button" id="course-modal-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" data-modal="topic">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="topic-modal-title">Add Topic</h3>
+        <button class="icon-btn" type="button" data-modal-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="topic-modal-name">Topic Name</label>
+          <input id="topic-modal-name" type="text" />
+        </div>
+        <div class="form-group">
+          <label for="topic-modal-unit">Unit Number</label>
+          <input id="topic-modal-unit" type="number" min="1" step="1" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn secondary" type="button" data-modal-close>Cancel</button>
+        <button class="btn primary" type="button" id="topic-modal-save">Save</button>
+      </div>
+    </div>
+  </div>
+{% endblock %}

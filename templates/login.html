@@ -1,0 +1,35 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+  <section class="panel login-panel">
+    <div class="login-copy">
+      <p class="eyebrow">Academic SaaS</p>
+      <h1>Welcome back to BLOOMS BOT</h1>
+      <p class="muted">Create Bloom-aware question papers, manage course banks, and export polished assessments.</p>
+      <div class="login-badges">
+        <span class="pill">Bloom taxonomy</span>
+        <span class="pill">PDF to paper</span>
+        <span class="pill">Question bank</span>
+      </div>
+    </div>
+    <form class="form-card" action="{{ url_for('upload') }}" method="get">
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="faculty@university.edu" required />
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="••••••••" required />
+      </div>
+      <div class="form-row">
+        <label class="checkbox">
+          <input type="checkbox" />
+          <span>Remember this device</span>
+        </label>
+        <span class="muted">No auth required for demo</span>
+      </div>
+      <button class="btn primary" type="submit">Continue to Workspace</button>
+      <p class="helper">This screen is UI-only. Click continue to access the platform.</p>
+    </form>
+  </section>
+{% endblock %}

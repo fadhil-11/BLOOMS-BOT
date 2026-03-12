@@ -1,0 +1,123 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+  <section class="grid two-col">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Build Your Paper</h2>
+          <p class="muted">Start from a saved configuration, then adjust the details below.</p>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="step-title">1. Select course & configuration</div>
+        <div class="form-group">
+          <label for="gen-course">Course</label>
+          <select id="gen-course" class="select"></select>
+          <p class="helper" id="gen-course-helper"></p>
+        </div>
+        <div class="form-group">
+          <label for="gen-config">Saved configurations</label>
+          <select id="gen-config" class="select"></select>
+          <p class="helper" id="gen-config-helper">Select a config to edit or create a new one below.</p>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="step-title">2. Paper basics</div>
+        <div class="form-grid two">
+          <div class="form-group">
+            <label for="config-name">Config name</label>
+            <input id="config-name" type="text" placeholder="Midterm A" />
+          </div>
+          <div class="form-group">
+            <label for="config-total">Target total marks</label>
+            <input id="config-total" type="number" min="10" step="1" />
+          </div>
+          <div class="form-group">
+            <label for="config-duration">Duration (minutes)</label>
+            <input id="config-duration" type="number" min="30" step="5" />
+          </div>
+          <div class="form-group">
+            <label for="config-difficulty">Difficulty</label>
+            <select id="config-difficulty" class="select">
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+              <option value="mixed">Mixed</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group inline-group">
+          <label class="checkbox">
+            <input id="config-randomize" type="checkbox" />
+            <span>Randomize question selection</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="summary-grid compact" id="config-summary">
+        <div class="summary-tile" id="summary-bloom-tile">
+          <div class="muted">Bloom total</div>
+          <div class="summary-value" id="summary-bloom">0%</div>
+        </div>
+        <div class="summary-tile" id="summary-marks-tile">
+          <div class="muted">Section total</div>
+          <div class="summary-value" id="summary-marks">0 marks</div>
+        </div>
+        <div class="summary-tile">
+          <div class="muted">Target total</div>
+          <div class="summary-value" id="summary-target">0 marks</div>
+        </div>
+      </div>
+      <p class="helper" id="summary-hint"></p>
+
+      <div class="form-section">
+        <div class="form-header">
+          <label>Bloom distribution</label>
+          <select id="bloom-preset" class="select compact"></select>
+        </div>
+        <div class="bloom-grid" id="bloom-grid"></div>
+        <div class="helper" id="bloom-sum">Bloom total: 0%</div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-header">
+          <label>Mark distribution (sections)</label>
+          <button class="btn ghost" id="add-section" type="button">Add section</button>
+        </div>
+        <div class="table" id="mark-table"></div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn secondary" id="config-save" type="button">Save changes</button>
+        <button class="btn ghost" id="config-save-as" type="button">Save as new</button>
+        <button class="btn primary" id="config-generate" type="button">Generate paper</button>
+      </div>
+      <p class="helper">Save changes before generating. Generation uses the latest saved config.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Generation Status</h2>
+          <p class="muted">Live progress of the pipeline execution.</p>
+        </div>
+      </div>
+
+      <div class="status-card">
+        <div class="status-pill" id="gen-status">Idle</div>
+        <div class="progress">
+          <div class="progress-bar" id="gen-progress"></div>
+        </div>
+        <div class="status-meta">
+          <span id="gen-step">Waiting for command</span>
+          <span id="gen-percent">0%</span>
+        </div>
+        <div class="status-debug" id="gen-debug"></div>
+      </div>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,105 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+  <section class="grid two-col">
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Upload Syllabus</h2>
+          <p class="muted">Follow these steps once per course to seed the question bank.</p>
+        </div>
+      </div>
+
+      <div class="step-list">
+        <div class="step">
+          <div class="step-title">1. Choose a course</div>
+          <div class="form-group">
+            <label for="upload-course">Course</label>
+            <div class="inline-group">
+              <select id="upload-course" class="select"></select>
+              <button class="btn secondary" type="button" data-modal-open="course">New Course</button>
+            </div>
+            <p class="helper" id="upload-course-helper"></p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-title">2. Add the syllabus PDF</div>
+          <div class="dropzone" id="upload-drop">
+            <input id="upload-file" type="file" accept="application/pdf" />
+            <div class="dropzone-content">
+              <div class="drop-icon">PDF</div>
+              <div>
+                <p class="drop-title">Drag & drop syllabus PDF</p>
+                <p class="muted">or click to browse</p>
+              </div>
+            </div>
+          </div>
+          <div class="file-meta" id="upload-file-meta">No file selected.</div>
+        </div>
+
+        <div class="step">
+          <div class="step-title">3. Optional configuration</div>
+          <div class="form-group">
+            <label for="upload-config">Paper configuration</label>
+            <select id="upload-config" class="select"></select>
+            <p class="helper" id="upload-config-helper"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn primary block" id="upload-start" type="button">Generate from syllabus</button>
+        <p class="helper">You can refine the paper later in the Generate page.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Generation Status</h2>
+          <p class="muted">Monitor pipeline progress as it extracts, generates, and classifies.</p>
+        </div>
+      </div>
+
+      <div class="status-card">
+        <div class="status-pill" id="upload-status">Idle</div>
+        <div class="progress">
+          <div class="progress-bar" id="upload-progress"></div>
+        </div>
+        <div class="status-meta">
+          <span id="upload-step">Waiting for input</span>
+          <span id="upload-percent">0%</span>
+        </div>
+        <div class="status-debug" id="upload-debug"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="modal" data-modal="course">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Create Course</h3>
+        <button class="icon-btn" type="button" data-modal-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="course-name">Course Name</label>
+          <input id="course-name" type="text" placeholder="Data Structures" />
+        </div>
+        <div class="form-group">
+          <label for="course-dept">Department</label>
+          <input id="course-dept" type="text" placeholder="Computer Science" />
+        </div>
+        <div class="form-group">
+          <label for="course-semester">Semester</label>
+          <input id="course-semester" type="text" placeholder="Spring 2026" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn secondary" type="button" data-modal-close>Cancel</button>
+        <button class="btn primary" type="button" id="course-save">Save Course</button>
+      </div>
+    </div>
+  </div>
+{% endblock %}

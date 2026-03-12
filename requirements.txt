@@ -1,0 +1,7 @@
+flask
+flask-sqlalchemy
+pypdf
+python-dotenv
+openai>=1.0.0
+
+

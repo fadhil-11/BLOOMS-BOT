@@ -1,0 +1,54 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or "BLOOMS BOT" }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body data-page="{{ page or '' }}">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">BLOOMS BOT</div>
+        <div class="brand-sub">Academic generation suite</div>
+        <nav class="nav">
+          <a href="{{ url_for('upload') }}" data-nav="upload">Upload</a>
+          <a href="{{ url_for('generate_page') }}" data-nav="generate">Generate</a>
+          <a href="{{ url_for('question_bank') }}" data-nav="question_bank">Question Bank</a>
+          <a href="{{ url_for('courses_page') }}" data-nav="courses">Courses</a>
+          <a href="{{ url_for('papers_page') }}" data-nav="papers">Papers</a>
+          <a href="{{ url_for('settings_page') }}" data-nav="settings">Settings</a>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="pill">v1 Academic</div>
+        </div>
+      </aside>
+
+      <div class="main">
+        <header class="topbar">
+          <div>
+            <div class="page-title">{{ title or "Workspace" }}</div>
+            {% if subtitle %}
+              <div class="page-sub">{{ subtitle }}</div>
+            {% else %}
+              <div class="page-sub">Design, generate, and curate Bloom-aligned assessments.</div>
+            {% endif %}
+          </div>
+          <div class="topbar-actions">
+            <a class="ghost-link" href="{{ url_for('login') }}">Sign out</a>
+          </div>
+        </header>
+
+        <main class="content">
+          {% block content %}{% endblock %}
+        </main>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </body>
+</html>

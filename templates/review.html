@@ -1,0 +1,44 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+  <section class="panel" id="review-panel" data-paper-id="{{ paper_id }}">
+    <div class="panel-header">
+      <div>
+        <h2>Paper Overview</h2>
+        <p class="muted">Review generated questions, swap alternatives, and export.</p>
+      </div>
+      <div class="panel-actions">
+        <button class="btn ghost" type="button" id="review-export">Export PDF</button>
+      </div>
+    </div>
+
+    <div class="summary-grid" id="paper-summary"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <div>
+        <h2>Questions</h2>
+        <p class="muted">Swap any question while keeping marks and Bloom level aligned.</p>
+      </div>
+    </div>
+    <div class="question-list" id="review-questions"></div>
+  </section>
+
+  <div class="modal" data-modal="swap">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Swap Question</h3>
+        <button class="icon-btn" type="button" data-modal-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted" id="swap-context"></p>
+        <div class="swap-list" id="swap-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn secondary" type="button" data-modal-close>Cancel</button>
+        <button class="btn primary" type="button" id="swap-confirm">Apply Swap</button>
+      </div>
+    </div>
+  </div>
+{% endblock %}

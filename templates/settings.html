@@ -1,0 +1,41 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+  <section class="panel">
+    <div class="panel-header">
+      <div>
+        <h2>Platform Settings</h2>
+        <p class="muted">Set defaults for generation, difficulty, and Bloom presets.</p>
+      </div>
+    </div>
+
+    <div class="form-grid two">
+      <div class="form-group">
+        <label for="settings-model">Default Model</label>
+        <input id="settings-model" type="text" placeholder="gpt-4o-mini" />
+      </div>
+      <div class="form-group">
+        <label for="settings-difficulty">Default Difficulty</label>
+        <select id="settings-difficulty" class="select">
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+          <option value="mixed">Mixed</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="settings-preset">Default Bloom Preset</label>
+        <select id="settings-preset" class="select"></select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Preset Preview</label>
+      <div class="bloom-preview" id="settings-preview"></div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn primary" type="button" id="settings-save">Save Settings</button>
+    </div>
+  </section>
+{% endblock %}
