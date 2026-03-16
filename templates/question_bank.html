@@ -1,93 +1,293 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
+
+{% block title %}Question Bank — Blooms Bot{% endblock %}
+{% block topbar_title %}Question Bank{% endblock %}
+{% block topbar_actions %}
+  <button class="btn btn-primary btn-sm" onclick="openModal('modal-add-q')">+ Add Question</button>
+{% endblock %}
 
 {% block content %}
-  <section class="panel">
-    <div class="panel-header split">
+<div class="page-header">
+  <h1>Question Bank</h1>
+  <p class="page-header-sub">Browse, filter, and manage all generated questions</p>
+</div>
+
+<!-- FILTER BAR -->
+<div class="card" style="margin-bottom:20px;padding:16px 20px">
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <input type="text" class="form-input" id="search-q" placeholder="Search questions…" style="flex:1;min-width:200px" oninput="debounceLoad()">
+    <select class="form-select" id="f-course" onchange="loadQuestions()" style="width:180px">
+      <option value="">All Courses</option>
+    </select>
+    <select class="form-select" id="f-bloom" onchange="loadQuestions()" style="width:140px">
+      <option value="">All Levels</option>
+      <option>Remember</option><option>Understand</option><option>Apply</option>
+      <option>Analyze</option><option>Evaluate</option><option>Create</option>
+    </select>
+    <select class="form-select" id="f-diff" onchange="loadQuestions()" style="width:120px">
+      <option value="">Any Difficulty</option>
+      <option value="easy">Easy</option>
+      <option value="medium">Medium</option>
+      <option value="hard">Hard</option>
+    </select>
+    <select class="form-select" id="f-marks" onchange="loadQuestions()" style="width:100px">
+      <option value="">Any Marks</option>
+      <option value="2">2 marks</option>
+      <option value="5">5 marks</option>
+      <option value="10">10 marks</option>
+    </select>
+  </div>
+</div>
+
+<!-- STATS ROW -->
+<div class="stat-grid" style="margin-bottom:20px" id="stat-row">
+  <div class="stat-card">
+    <div class="stat-label">Total Questions</div>
+    <div class="stat-value" id="s-total">—</div>
+  </div>
+  <div class="stat-card" style="--top-color:var(--teal)">
+    <div class="stat-label">Showing</div>
+    <div class="stat-value" id="s-showing">—</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Bloom Coverage</div>
+    <div class="stat-value" id="s-coverage">—</div>
+  </div>
+</div>
+
+<!-- TABLE -->
+<div class="table-wrap">
+  <table id="q-table">
+    <thead>
+      <tr>
+        <th style="width:50px">#</th>
+        <th>Question</th>
+        <th style="width:120px">Bloom Level</th>
+        <th style="width:90px">Marks</th>
+        <th style="width:90px">Difficulty</th>
+        <th style="width:100px">Course</th>
+        <th style="width:80px">Actions</th>
+      </tr>
+    </thead>
+    <tbody id="q-tbody">
+      <tr>
+        <td colspan="7" style="text-align:center;padding:48px">
+          <div class="loader" style="margin:0 auto"></div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div id="q-pagination" style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;font-size:13px;color:var(--text-3)">
+  <span id="page-info"></span>
+  <div style="display:flex;gap:6px" id="page-btns"></div>
+</div>
+
+<!-- ADD/EDIT MODAL -->
+<div class="modal-overlay" id="modal-add-q">
+  <div class="modal">
+    <div class="modal-header">
       <div>
-        <h2>Question Bank</h2>
-        <p class="muted">Browse, edit, and curate validated questions.</p>
+        <h2 id="aq-title">Add Question</h2>
+        <div style="font-size:13px;color:var(--text-3);margin-top:4px">Manually add to the question bank</div>
       </div>
-      <button class="btn primary" type="button" id="qb-add">Add Question</button>
+      <button class="modal-close" onclick="closeModal('modal-add-q')">×</button>
+    </div>
+    <input type="hidden" id="aq-id">
+
+    <div class="form-group">
+      <label class="form-label">Course *</label>
+      <select class="form-select" id="aq-course"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Question Text *</label>
+      <textarea class="form-textarea" id="aq-text" placeholder="Enter your question…" style="min-height:120px"></textarea>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">Bloom Level</label>
+        <select class="form-select" id="aq-bloom">
+          <option value="">— Select —</option>
+          <option>Remember</option><option>Understand</option><option>Apply</option>
+          <option>Analyze</option><option>Evaluate</option><option>Create</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Marks</label>
+        <input type="number" class="form-input" id="aq-marks" value="5" min="1" max="100">
+      </div>
     </div>
 
-    <div class="filters">
-      <select id="qb-course" class="select"></select>
-      <select id="qb-topic" class="select"></select>
-      <select id="qb-bloom" class="select">
-        <option value="">All Bloom Levels</option>
-        <option value="Remember">Remember</option>
-        <option value="Understand">Understand</option>
-        <option value="Apply">Apply</option>
-        <option value="Analyze">Analyze</option>
-        <option value="Evaluate">Evaluate</option>
-        <option value="Create">Create</option>
-      </select>
-      <select id="qb-difficulty" class="select">
-        <option value="">All Difficulty</option>
-        <option value="easy">Easy</option>
-        <option value="medium">Medium</option>
-        <option value="hard">Hard</option>
-      </select>
-      <input id="qb-search" type="search" placeholder="Search question text" />
-      <button class="btn ghost" type="button" id="qb-refresh">Filter</button>
-    </div>
-
-    <div class="table" id="qb-table"></div>
-  </section>
-
-  <div class="modal" data-modal="question">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3 id="qb-modal-title">Add Question</h3>
-        <button class="icon-btn" type="button" data-modal-close>&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="qb-form-course">Course</label>
-          <select id="qb-form-course" class="select"></select>
-        </div>
-        <div class="form-group">
-          <label for="qb-form-topic">Topic</label>
-          <select id="qb-form-topic" class="select"></select>
-        </div>
-        <div class="form-group">
-          <label for="qb-form-text">Question Text</label>
-          <textarea id="qb-form-text" rows="4"></textarea>
-        </div>
-        <div class="form-grid two">
-          <div class="form-group">
-            <label for="qb-form-marks">Marks</label>
-            <input id="qb-form-marks" type="number" min="1" step="1" />
-          </div>
-          <div class="form-group">
-            <label for="qb-form-difficulty">Difficulty</label>
-            <select id="qb-form-difficulty" class="select">
-              <option value="easy">Easy</option>
-              <option value="medium">Medium</option>
-              <option value="hard">Hard</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="qb-form-bloom">Bloom Level</label>
-            <select id="qb-form-bloom" class="select">
-              <option value="Remember">Remember</option>
-              <option value="Understand">Understand</option>
-              <option value="Apply">Apply</option>
-              <option value="Analyze">Analyze</option>
-              <option value="Evaluate">Evaluate</option>
-              <option value="Create">Create</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="qb-form-verb">Bloom Verb</label>
-            <input id="qb-form-verb" type="text" placeholder="Explain" />
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn secondary" type="button" data-modal-close>Cancel</button>
-        <button class="btn primary" type="button" id="qb-save">Save</button>
-      </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-q')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveQuestion()">Save Question</button>
     </div>
   </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PAGE_SIZE = 25;
+let allQuestions = [];
+let courses = [];
+let page = 1;
+let debounceTimer;
+
+async function init() {
+  const cr = await fetch('/api/courses');
+  courses = (await cr.json()).courses || [];
+  const sel = document.getElementById('f-course');
+  const aqSel = document.getElementById('aq-course');
+  courses.forEach(c => {
+    sel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+    aqSel.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+  });
+  loadQuestions();
+}
+
+function debounceLoad() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(loadQuestions, 300);
+}
+
+async function loadQuestions() {
+  const params = new URLSearchParams();
+  const course = document.getElementById('f-course').value;
+  const bloom = document.getElementById('f-bloom').value;
+  const diff = document.getElementById('f-diff').value;
+  const marks = document.getElementById('f-marks').value;
+  const search = document.getElementById('search-q').value.trim();
+  if (course) params.set('course_id', course);
+  if (bloom) params.set('bloom', bloom);
+  if (diff) params.set('difficulty', diff);
+  if (marks) params.set('marks', marks);
+  if (search) params.set('q', search);
+
+  const r = await fetch('/api/questions?' + params);
+  const d = await r.json();
+  allQuestions = d.questions || [];
+  page = 1;
+  renderTable();
+  updateStats();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('q-tbody');
+  const start = (page - 1) * PAGE_SIZE;
+  const slice = allQuestions.slice(start, start + PAGE_SIZE);
+
+  if (!slice.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state" style="padding:40px">
+      <div class="empty-icon">🔍</div>
+      <div class="empty-title">No questions found</div>
+      <div class="empty-sub">Try adjusting your filters</div>
+    </div></td></tr>`;
+    document.getElementById('page-info').textContent = '';
+    document.getElementById('page-btns').innerHTML = '';
+    return;
+  }
+
+  tbody.innerHTML = slice.map((q, i) => {
+    const c = courses.find(x => x.id === q.course_id);
+    return `<tr>
+      <td style="font-family:var(--font-mono);color:var(--text-3);font-size:11px">${start + i + 1}</td>
+      <td style="max-width:400px">
+        <div style="color:var(--text);line-height:1.5;font-size:13px">${q.text}</div>
+        ${q.bloom_verb ? `<div style="margin-top:4px;font-size:11px;color:var(--text-3);font-family:var(--font-mono)">verb: ${q.bloom_verb}</div>` : ''}
+      </td>
+      <td>${bloomBadge(q.bloom_level)}</td>
+      <td><span style="font-family:var(--font-mono);font-size:13px;color:var(--text)">${q.marks}</span><span style="color:var(--text-3);font-size:11px"> pts</span></td>
+      <td>${diffBadge(q.difficulty)}</td>
+      <td><span style="font-size:12px;color:var(--text-3)">${c ? c.name.slice(0,16) : '—'}</span></td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn-icon" onclick="editQ(${q.id})" title="Edit" style="padding:6px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn-icon" onclick="deleteQ(${q.id})" title="Delete" style="padding:6px;color:var(--red);border-color:var(--red-dim)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Pagination
+  const total = allQuestions.length;
+  const pages = Math.ceil(total / PAGE_SIZE);
+  document.getElementById('page-info').textContent = `Showing ${start+1}–${Math.min(start+PAGE_SIZE, total)} of ${total}`;
+
+  const btns = document.getElementById('page-btns');
+  btns.innerHTML = '';
+  if (pages > 1) {
+    for (let p = 1; p <= pages; p++) {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-ghost btn-sm';
+      if (p === page) { btn.style.background = 'var(--amber-glow)'; btn.style.color = 'var(--amber)'; }
+      btn.textContent = p;
+      btn.onclick = () => { page = p; renderTable(); };
+      btns.appendChild(btn);
+    }
+  }
+}
+
+function updateStats() {
+  document.getElementById('s-total').textContent = allQuestions.length;
+  document.getElementById('s-showing').textContent = allQuestions.length;
+  const levels = new Set(allQuestions.map(q => q.bloom_level).filter(Boolean));
+  document.getElementById('s-coverage').textContent = levels.size + '/6';
+}
+
+function editQ(id) {
+  const q = allQuestions.find(x => x.id === id);
+  if (!q) return;
+  document.getElementById('aq-title').textContent = 'Edit Question';
+  document.getElementById('aq-id').value = q.id;
+  document.getElementById('aq-course').value = q.course_id;
+  document.getElementById('aq-text').value = q.text;
+  document.getElementById('aq-bloom').value = q.bloom_level || '';
+  document.getElementById('aq-marks').value = q.marks;
+  openModal('modal-add-q');
+}
+
+async function deleteQ(id) {
+  if (!confirm('Delete this question?')) return;
+  await fetch(`/api/questions/${id}`, { method: 'DELETE' });
+  showToast('Question deleted', 'info');
+  loadQuestions();
+}
+
+async function saveQuestion() {
+  const id = document.getElementById('aq-id').value;
+  const text = document.getElementById('aq-text').value.trim();
+  const course_id = document.getElementById('aq-course').value;
+  if (!text || !course_id) { showToast('Course and question text are required', 'error'); return; }
+
+  const payload = {
+    course_id: parseInt(course_id),
+    text,
+    bloom_level: document.getElementById('aq-bloom').value,
+    marks: parseInt(document.getElementById('aq-marks').value) || 5,
+  };
+
+  try {
+    const url = id ? `/api/questions/${id}` : '/api/questions';
+    const method = id ? 'PUT' : 'POST';
+    const r = await fetch(url, {
+      method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+    closeModal('modal-add-q');
+    document.getElementById('aq-id').value = '';
+    document.getElementById('aq-title').textContent = 'Add Question';
+    document.getElementById('aq-text').value = '';
+    showToast(id ? 'Question updated' : 'Question added', 'success');
+    loadQuestions();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+init();
+</script>
 {% endblock %}

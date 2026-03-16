@@ -1,123 +1,317 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
+
+{% block title %}Generate Paper — Blooms Bot{% endblock %}
+{% block topbar_title %}Generate Paper{% endblock %}
+{% block topbar_actions %}
+  <a href="/upload" class="btn btn-ghost btn-sm">← Upload</a>
+{% endblock %}
 
 {% block content %}
-  <section class="grid two-col">
-    <div class="panel">
-      <div class="panel-header">
-        <div>
-          <h2>Build Your Paper</h2>
-          <p class="muted">Start from a saved configuration, then adjust the details below.</p>
-        </div>
+<div class="page-header">
+  <h1>Generate Paper</h1>
+  <p class="page-header-sub">Configure constraints and generate from saved question banks</p>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
+
+  <!-- LEFT -->
+  <div>
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header"><div class="card-title">Paper Details</div></div>
+
+      <div class="form-group">
+        <label class="form-label">Course *</label>
+        <select class="form-select" id="g-course" onchange="loadConfigs()">
+          <option value="">— Select course —</option>
+        </select>
       </div>
 
-      <div class="form-section">
-        <div class="step-title">1. Select course & configuration</div>
-        <div class="form-group">
-          <label for="gen-course">Course</label>
-          <select id="gen-course" class="select"></select>
-          <p class="helper" id="gen-course-helper"></p>
-        </div>
-        <div class="form-group">
-          <label for="gen-config">Saved configurations</label>
-          <select id="gen-config" class="select"></select>
-          <p class="helper" id="gen-config-helper">Select a config to edit or create a new one below.</p>
-        </div>
+      <div class="form-group">
+        <label class="form-label">Paper Title</label>
+        <input type="text" class="form-input" id="g-title" placeholder="Mid-semester Examination 2025">
       </div>
 
-      <div class="form-section">
-        <div class="step-title">2. Paper basics</div>
-        <div class="form-grid two">
-          <div class="form-group">
-            <label for="config-name">Config name</label>
-            <input id="config-name" type="text" placeholder="Midterm A" />
-          </div>
-          <div class="form-group">
-            <label for="config-total">Target total marks</label>
-            <input id="config-total" type="number" min="10" step="1" />
-          </div>
-          <div class="form-group">
-            <label for="config-duration">Duration (minutes)</label>
-            <input id="config-duration" type="number" min="30" step="5" />
-          </div>
-          <div class="form-group">
-            <label for="config-difficulty">Difficulty</label>
-            <select id="config-difficulty" class="select">
-              <option value="easy">Easy</option>
-              <option value="medium">Medium</option>
-              <option value="hard">Hard</option>
-              <option value="mixed">Mixed</option>
-            </select>
-          </div>
+      <div class="grid-2">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Total Marks</label>
+          <input type="number" class="form-input" id="g-marks" value="50">
         </div>
-
-        <div class="form-group inline-group">
-          <label class="checkbox">
-            <input id="config-randomize" type="checkbox" />
-            <span>Randomize question selection</span>
-          </label>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Duration (min)</label>
+          <input type="number" class="form-input" id="g-dur" value="90">
         </div>
-      </div>
-
-      <div class="summary-grid compact" id="config-summary">
-        <div class="summary-tile" id="summary-bloom-tile">
-          <div class="muted">Bloom total</div>
-          <div class="summary-value" id="summary-bloom">0%</div>
-        </div>
-        <div class="summary-tile" id="summary-marks-tile">
-          <div class="muted">Section total</div>
-          <div class="summary-value" id="summary-marks">0 marks</div>
-        </div>
-        <div class="summary-tile">
-          <div class="muted">Target total</div>
-          <div class="summary-value" id="summary-target">0 marks</div>
-        </div>
-      </div>
-      <p class="helper" id="summary-hint"></p>
-
-      <div class="form-section">
-        <div class="form-header">
-          <label>Bloom distribution</label>
-          <select id="bloom-preset" class="select compact"></select>
-        </div>
-        <div class="bloom-grid" id="bloom-grid"></div>
-        <div class="helper" id="bloom-sum">Bloom total: 0%</div>
-      </div>
-
-      <div class="form-section">
-        <div class="form-header">
-          <label>Mark distribution (sections)</label>
-          <button class="btn ghost" id="add-section" type="button">Add section</button>
-        </div>
-        <div class="table" id="mark-table"></div>
-      </div>
-
-      <div class="form-actions">
-        <button class="btn secondary" id="config-save" type="button">Save changes</button>
-        <button class="btn ghost" id="config-save-as" type="button">Save as new</button>
-        <button class="btn primary" id="config-generate" type="button">Generate paper</button>
-      </div>
-      <p class="helper">Save changes before generating. Generation uses the latest saved config.</p>
-    </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <div>
-          <h2>Generation Status</h2>
-          <p class="muted">Live progress of the pipeline execution.</p>
-        </div>
-      </div>
-
-      <div class="status-card">
-        <div class="status-pill" id="gen-status">Idle</div>
-        <div class="progress">
-          <div class="progress-bar" id="gen-progress"></div>
-        </div>
-        <div class="status-meta">
-          <span id="gen-step">Waiting for command</span>
-          <span id="gen-percent">0%</span>
-        </div>
-        <div class="status-debug" id="gen-debug"></div>
       </div>
     </div>
-  </section>
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <div class="card-title">Saved Configurations</div>
+        <button class="btn btn-ghost btn-sm" onclick="openModal('modal-save-config')">Save Current</button>
+      </div>
+      <div id="configs-list">
+        <div style="color:var(--text-3);font-size:13px;text-align:center;padding:20px">Select a course to see saved configurations</div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="btn-gen" onclick="generate()" style="width:100%;justify-content:center;padding:14px;font-size:15px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+      Generate Paper
+    </button>
+  </div>
+
+  <!-- RIGHT -->
+  <div>
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <div class="card-title">Bloom Distribution</div>
+        <select class="form-select" id="preset-sel" style="width:auto;padding:5px 32px 5px 10px;font-size:12px" onchange="applyPreset(this.value)">
+          <option value="Balanced">Balanced</option>
+          <option value="Easy">Easy</option>
+          <option value="Application">Application</option>
+          <option value="Higher Order">Higher Order</option>
+        </select>
+      </div>
+      <div id="bloom-sliders" style="display:flex;flex-direction:column;gap:14px"></div>
+      <div id="bloom-warn" class="alert alert-warning" style="display:none;margin-top:12px">
+        ⚠ Must total 100%. Currently <span id="bloom-total">0</span>%
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title">Question Bank Summary</div></div>
+      <div id="bank-summary">
+        <div style="color:var(--text-3);font-size:13px;text-align:center;padding:20px">Select a course to view</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SAVE CONFIG MODAL -->
+<div class="modal-overlay" id="modal-save-config">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div><h2>Save Configuration</h2></div>
+      <button class="modal-close" onclick="closeModal('modal-save-config')">×</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Configuration Name *</label>
+      <input type="text" class="form-input" id="sc-name" placeholder="e.g. Mid-Semester Standard">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('modal-save-config')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveConfig()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- PROGRESS -->
+<div id="prog-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:300;align-items:center;justify-content:center;backdrop-filter:blur(6px)">
+  <div style="background:var(--bg-1);border:1px solid var(--border-2);border-radius:var(--radius-lg);padding:40px;width:440px;box-shadow:0 20px 60px rgba(0,0,0,0.6)">
+    <div style="display:flex;gap:14px;align-items:center;margin-bottom:24px">
+      <div class="loader"></div>
+      <div>
+        <div style="font-family:var(--font-serif);font-size:17px;font-style:italic">Generating paper…</div>
+        <div style="font-size:12px;color:var(--text-3);margin-top:2px">Please wait</div>
+      </div>
+    </div>
+    <div class="progress-wrap"><div class="progress-fill" id="pg-bar" style="width:0%"></div></div>
+    <div style="font-size:12px;color:var(--text-2);margin-top:8px" id="pg-step">Starting…</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PRESETS = {
+  Balanced:{Remember:20,Understand:30,Apply:30,Analyze:15,Evaluate:5,Create:0},
+  Easy:{Remember:30,Understand:35,Apply:20,Analyze:10,Evaluate:5,Create:0},
+  Application:{Remember:15,Understand:20,Apply:40,Analyze:20,Evaluate:5,Create:0},
+  'Higher Order':{Remember:10,Understand:20,Apply:25,Analyze:25,Evaluate:15,Create:5},
+};
+const COLORS = {Remember:'#60a0e0',Understand:'#4caf7d',Apply:'#f5a623',Analyze:'#9b7ef8',Evaluate:'#f05454',Create:'#38d9c0'};
+
+let dist = {...PRESETS.Balanced};
+let courses = [], configs = [];
+
+async function init() {
+  const r = await fetch('/api/courses');
+  courses = (await r.json()).courses || [];
+  const sel = document.getElementById('g-course');
+  courses.forEach(c => { sel.innerHTML += `<option value="${c.id}">${c.name}</option>`; });
+  renderSliders();
+}
+
+function renderSliders() {
+  const c = document.getElementById('bloom-sliders');
+  c.innerHTML = Object.entries(dist).map(([level, val]) => `
+    <div class="bloom-bar">
+      <div class="bloom-bar-header">
+        <span class="bloom-bar-label" style="color:${COLORS[level]}">${level}</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="number" value="${val}" min="0" max="100" step="5" id="n-${level}"
+            style="width:52px;background:var(--bg-3);border:1px solid var(--border-2);color:var(--text);border-radius:4px;padding:3px 8px;font-family:var(--font-mono);font-size:12px;text-align:center;outline:none"
+            oninput="upd('${level}',this.value)">
+          <span style="font-size:11px;color:var(--text-3)">%</span>
+        </div>
+      </div>
+      <div class="bloom-bar-track"><div class="bloom-bar-fill" id="b-${level}" style="width:${val}%;background:${COLORS[level]}"></div></div>
+    </div>`).join('');
+}
+
+function upd(level, v) {
+  dist[level] = Math.max(0, Math.min(100, parseInt(v)||0));
+  document.getElementById(`b-${level}`).style.width = dist[level] + '%';
+  const total = Object.values(dist).reduce((a,b) => a+b, 0);
+  document.getElementById('bloom-total').textContent = total;
+  document.getElementById('bloom-warn').style.display = total !== 100 ? 'flex' : 'none';
+}
+
+function applyPreset(name) {
+  dist = {...PRESETS[name]};
+  Object.entries(dist).forEach(([l,v]) => {
+    const n = document.getElementById(`n-${l}`);
+    const b = document.getElementById(`b-${l}`);
+    if (n) n.value = v;
+    if (b) b.style.width = v + '%';
+  });
+  const total = Object.values(dist).reduce((a,b) => a+b, 0);
+  document.getElementById('bloom-warn').style.display = total !== 100 ? 'flex' : 'none';
+}
+
+async function loadConfigs() {
+  const courseId = document.getElementById('g-course').value;
+  if (!courseId) return;
+
+  const [qr, cr] = await Promise.all([
+    fetch(`/api/questions?course_id=${courseId}`),
+    fetch(`/api/configs?course_id=${courseId}`)
+  ]);
+  const questions = (await qr.json()).questions || [];
+  configs = (await cr.json()).configs || [];
+
+  // Bank summary
+  const bloom = {};
+  questions.forEach(q => { if (q.bloom_level) bloom[q.bloom_level] = (bloom[q.bloom_level]||0)+1; });
+  const COLORS2 = {Remember:'#60a0e0',Understand:'#4caf7d',Apply:'#f5a623',Analyze:'#9b7ef8',Evaluate:'#f05454',Create:'#38d9c0'};
+  document.getElementById('bank-summary').innerHTML = questions.length
+    ? `<div style="margin-bottom:12px">
+        <span style="font-size:10px;color:var(--text-3);font-family:var(--font-mono)">TOTAL: </span>
+        <span style="font-family:var(--font-serif);font-size:20px;color:var(--text)">${questions.length}</span>
+        <span style="font-size:12px;color:var(--text-3)"> questions</span>
+      </div>
+      ${Object.entries(COLORS2).map(([level, color]) => {
+        const cnt = bloom[level] || 0;
+        const pct = questions.length ? Math.round(cnt/questions.length*100) : 0;
+        return `<div class="bloom-bar">
+          <div class="bloom-bar-header"><span class="bloom-bar-label" style="color:${color}">${level}</span><span class="bloom-bar-pct">${cnt}</span></div>
+          <div class="bloom-bar-track"><div class="bloom-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+        </div>`;
+      }).join('')}`
+    : '<div style="color:var(--text-3);font-size:13px;text-align:center;padding:20px">No questions in bank yet.<br><a href="/upload" style="color:var(--amber)">Upload a syllabus</a> to generate questions.</div>';
+
+  // Configs list
+  document.getElementById('configs-list').innerHTML = configs.length
+    ? configs.map(c => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg-2);border-radius:var(--radius);border:1px solid var(--border);margin-bottom:8px">
+          <div>
+            <div style="font-size:13px;color:var(--text)">${c.name}</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:2px">${c.total_marks}m · ${c.duration_minutes}min</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadConfig(${c.id})">Load</button>
+        </div>`).join('')
+    : '<div style="color:var(--text-3);font-size:13px;text-align:center;padding:12px">No saved configurations</div>';
+}
+
+function loadConfig(id) {
+  const c = configs.find(x => x.id === id);
+  if (!c) return;
+  document.getElementById('g-marks').value = c.total_marks;
+  document.getElementById('g-dur').value = c.duration_minutes;
+  if (c.bloom_distribution) {
+    dist = {...c.bloom_distribution};
+    Object.entries(dist).forEach(([l,v]) => {
+      const n = document.getElementById(`n-${l}`);
+      const b = document.getElementById(`b-${l}`);
+      if (n) n.value = v;
+      if (b) b.style.width = v + '%';
+    });
+  }
+  showToast(`Loaded config: ${c.name}`, 'info');
+}
+
+async function saveConfig() {
+  const courseId = document.getElementById('g-course').value;
+  const name = document.getElementById('sc-name').value.trim();
+  if (!courseId || !name) { showToast('Select a course and enter a name', 'error'); return; }
+  try {
+    const r = await fetch('/api/configs', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        course_id: parseInt(courseId),
+        name,
+        total_marks: parseInt(document.getElementById('g-marks').value)||50,
+        duration_minutes: parseInt(document.getElementById('g-dur').value)||90,
+        bloom_distribution: dist,
+      })
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+    closeModal('modal-save-config');
+    showToast('Configuration saved', 'success');
+    loadConfigs();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function generate() {
+  const courseId = document.getElementById('g-course').value;
+  if (!courseId) { showToast('Please select a course','error'); return; }
+  const total = Object.values(dist).reduce((a,b)=>a+b,0);
+  if (total !== 100) { showToast('Bloom distribution must total 100%','error'); return; }
+
+  const overlay = document.getElementById('prog-overlay');
+  overlay.style.display = 'flex';
+
+  try {
+    const r = await fetch('/api/generate', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        course_id: parseInt(courseId),
+        config: {
+          name: document.getElementById('g-title').value.trim() || undefined,
+          total_marks: parseInt(document.getElementById('g-marks').value)||50,
+          duration_minutes: parseInt(document.getElementById('g-dur').value)||90,
+          bloom_distribution: dist,
+        }
+      })
+    });
+    const d = await r.json();
+    if (!d.job_id) throw new Error(d.error||'Failed');
+    pollJob(d.job_id);
+  } catch(e) {
+    overlay.style.display = 'none';
+    showToast(e.message,'error');
+  }
+}
+
+function pollJob(jobId) {
+  const iv = setInterval(async () => {
+    const r = await fetch(`/api/jobs/${jobId}`);
+    const d = await r.json();
+    document.getElementById('pg-bar').style.width = (d.progress||0) + '%';
+    document.getElementById('pg-step').textContent = d.current_step || '…';
+    if (d.status === 'done') {
+      clearInterval(iv);
+      const pid = d.result?.generated_paper_id;
+      setTimeout(() => location.href = pid ? `/review/${pid}` : '/papers', 600);
+    } else if (d.status === 'error') {
+      clearInterval(iv);
+      document.getElementById('prog-overlay').style.display = 'none';
+      showToast(d.error||'Failed','error');
+    }
+  }, 1200);
+}
+
+init();
+</script>
 {% endblock %}

@@ -1,44 +1,272 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
+
+{% block title %}Review Paper — Blooms Bot{% endblock %}
+{% block topbar_title %}Review & Export{% endblock %}
+{% block topbar_actions %}
+  <button class="btn btn-ghost btn-sm" onclick="location.href='/papers'">← Papers</button>
+  <button class="btn btn-ghost btn-sm" onclick="printPaper()">🖨 Print</button>
+  <button class="btn btn-primary btn-sm" onclick="saveRevisions()">Save Revisions</button>
+{% endblock %}
 
 {% block content %}
-  <section class="panel" id="review-panel" data-paper-id="{{ paper_id }}">
-    <div class="panel-header">
-      <div>
-        <h2>Paper Overview</h2>
-        <p class="muted">Review generated questions, swap alternatives, and export.</p>
-      </div>
-      <div class="panel-actions">
-        <button class="btn ghost" type="button" id="review-export">Export PDF</button>
-      </div>
-    </div>
-
-    <div class="summary-grid" id="paper-summary"></div>
-  </section>
-
-  <section class="panel">
-    <div class="panel-header">
-      <div>
-        <h2>Questions</h2>
-        <p class="muted">Swap any question while keeping marks and Bloom level aligned.</p>
-      </div>
-    </div>
-    <div class="question-list" id="review-questions"></div>
-  </section>
-
-  <div class="modal" data-modal="swap">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3>Swap Question</h3>
-        <button class="icon-btn" type="button" data-modal-close>&times;</button>
-      </div>
-      <div class="modal-body">
-        <p class="muted" id="swap-context"></p>
-        <div class="swap-list" id="swap-list"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn secondary" type="button" data-modal-close>Cancel</button>
-        <button class="btn primary" type="button" id="swap-confirm">Apply Swap</button>
-      </div>
-    </div>
+<div id="review-wrap">
+  <div style="display:flex;align-items:center;justify-content:center;height:200px">
+    <div class="loader"></div>
   </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PAPER_ID = {{ paper_id }};
+let paper = null;
+let questions = [];
+let courses = [];
+
+async function init() {
+  const [pr, cr] = await Promise.all([
+    fetch(`/api/papers/${PAPER_ID}`),
+    fetch('/api/courses'),
+  ]);
+  paper = (await pr.json()).paper;
+  courses = (await cr.json()).courses || [];
+  questions = paper.questions || [];
+  render();
+}
+
+function getCourse() {
+  return courses.find(c => c.id === paper.course_id);
+}
+
+function render() {
+  const course = getCourse();
+  const totalMarks = questions.reduce((s,q) => s + (q.marks||0), 0);
+
+  // Bloom distribution
+  const bloomCounts = {};
+  questions.forEach(q => {
+    if (q.bloom_level) bloomCounts[q.bloom_level] = (bloomCounts[q.bloom_level]||0) + 1;
+  });
+
+  document.getElementById('review-wrap').innerHTML = `
+    <!-- HEADER CARD -->
+    <div class="card" style="margin-bottom:24px;border-left:3px solid var(--amber)">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px">
+        <div>
+          <div style="font-size:11px;color:var(--text-3);font-family:var(--font-mono);letter-spacing:1px;margin-bottom:6px">GENERATED PAPER</div>
+          <h1 style="margin-bottom:8px">${paper.title}</h1>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            ${course ? `<span class="chip">📘 ${course.name}</span>` : ''}
+            <span class="chip">⏱ ${paper.duration_minutes} min</span>
+            <span class="chip">📅 ${new Date(paper.created_at).toLocaleDateString()}</span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;min-width:200px">
+          <div style="text-align:center;padding:14px;background:var(--bg-2);border-radius:var(--radius);border:1px solid var(--border)">
+            <div style="font-size:10px;color:var(--text-3);font-family:var(--font-mono)">TOTAL MARKS</div>
+            <div style="font-family:var(--font-serif);font-size:28px;color:var(--amber)">${totalMarks}</div>
+          </div>
+          <div style="text-align:center;padding:14px;background:var(--bg-2);border-radius:var(--radius);border:1px solid var(--border)">
+            <div style="font-size:10px;color:var(--text-3);font-family:var(--font-mono)">QUESTIONS</div>
+            <div style="font-family:var(--font-serif);font-size:28px;color:var(--text)">${questions.length}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 280px;gap:24px;align-items:start">
+
+      <!-- QUESTIONS LIST -->
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <h3>Questions</h3>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="addQuestion()">+ Add</button>
+          </div>
+        </div>
+        <div id="q-list" style="display:flex;flex-direction:column;gap:10px">
+          ${questions.map((q, i) => renderQuestion(q, i)).join('')}
+        </div>
+      </div>
+
+      <!-- SIDEBAR -->
+      <div style="position:sticky;top:80px;display:flex;flex-direction:column;gap:16px">
+
+        <!-- BLOOM DISTRIBUTION -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Bloom Distribution</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px" id="bloom-dist-sidebar">
+            ${['Remember','Understand','Apply','Analyze','Evaluate','Create'].map(level => {
+              const count = bloomCounts[level] || 0;
+              const pct = questions.length ? Math.round(count / questions.length * 100) : 0;
+              const colors = {Remember:'#60a0e0',Understand:'#4caf7d',Apply:'#f5a623',Analyze:'#9b7ef8',Evaluate:'#f05454',Create:'#38d9c0'};
+              return `<div class="bloom-bar">
+                <div class="bloom-bar-header">
+                  <span class="bloom-bar-label" style="color:${colors[level]}">${level}</span>
+                  <span class="bloom-bar-pct">${count}q · ${pct}%</span>
+                </div>
+                <div class="bloom-bar-track">
+                  <div class="bloom-bar-fill" style="width:${pct}%;background:${colors[level]}"></div>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- MARKS BREAKDOWN -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Mark Breakdown</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            ${(() => {
+              const byMarks = {};
+              questions.forEach(q => { byMarks[q.marks] = (byMarks[q.marks]||0) + 1; });
+              return Object.entries(byMarks).sort((a,b) => a[0]-b[0]).map(([m, cnt]) =>
+                `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">
+                  <span style="color:var(--text-2)">${m}-mark questions</span>
+                  <span style="font-family:var(--font-mono);color:var(--text)">×${cnt}</span>
+                </div>`
+              ).join('');
+            })()}
+          </div>
+        </div>
+
+        <!-- EXPORT -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Export</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn btn-ghost" style="justify-content:flex-start;gap:10px" onclick="printPaper()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Print / Save PDF
+            </button>
+            <button class="btn btn-ghost" style="justify-content:flex-start;gap:10px" onclick="copyText()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              Copy as Text
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderQuestion(q, i) {
+  const colors = {Remember:'#60a0e0',Understand:'#4caf7d',Apply:'#f5a623',Analyze:'#9b7ef8',Evaluate:'#f05454',Create:'#38d9c0'};
+  const color = colors[q.bloom_level] || 'var(--text-3)';
+  return `
+    <div class="card" id="q-card-${i}" style="padding:18px;border-left:3px solid ${color};transition:border-color 0.2s" data-idx="${i}">
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <div style="width:28px;height:28px;background:var(--bg-2);border:1px solid var(--border-2);border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:11px;color:var(--text-3);flex-shrink:0">${i+1}</div>
+        <div style="flex:1">
+          <div class="q-text" style="color:var(--text);line-height:1.6;font-size:14px">${q.text}</div>
+          <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+            ${bloomBadge(q.bloom_level)}
+            ${diffBadge(q.difficulty)}
+            <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-3)">${q.marks} marks</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:4px;flex-shrink:0">
+          <button class="btn-icon" onclick="editQ(${i})" title="Edit" style="padding:6px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn-icon" onclick="removeQ(${i})" title="Remove" style="padding:6px;color:var(--red);border-color:var(--red-dim)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function editQ(i) {
+  const q = questions[i];
+  const newText = prompt('Edit question:', q.text);
+  if (newText && newText.trim()) {
+    questions[i].text = newText.trim();
+    document.getElementById(`q-card-${i}`).querySelector('.q-text').textContent = newText.trim();
+    showToast('Question updated — save to keep changes', 'info');
+  }
+}
+
+function removeQ(i) {
+  if (!confirm('Remove this question from the paper?')) return;
+  questions.splice(i, 1);
+  render();
+  showToast('Question removed', 'info');
+}
+
+function addQuestion() {
+  const text = prompt('Enter new question:');
+  if (!text) return;
+  questions.push({ text: text.trim(), marks: 5, bloom_level: null, difficulty: 'medium' });
+  render();
+  showToast('Question added — save to keep changes', 'info');
+}
+
+async function saveRevisions() {
+  try {
+    const r = await fetch(`/api/papers/${PAPER_ID}/revise`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ questions, total_marks: questions.reduce((s,q) => s+(q.marks||0), 0) })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    showToast('Revised paper saved!', 'success');
+    setTimeout(() => location.href = `/review/${d.paper.id}`, 800);
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+function printPaper() {
+  const course = getCourse();
+  const totalMarks = questions.reduce((s,q) => s+(q.marks||0), 0);
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head>
+    <style>
+      body{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:20px;color:#111;line-height:1.6}
+      .header{border-bottom:2px solid #111;padding-bottom:16px;margin-bottom:24px;text-align:center}
+      .meta{display:flex;justify-content:space-between;font-size:13px;margin-top:10px;color:#555}
+      .q{margin-bottom:20px;padding:12px;border-left:3px solid #ccc}
+      .q-num{font-weight:bold;color:#111}
+      .q-meta{font-size:12px;color:#888;margin-top:6px}
+      @media print{body{margin:20px}}
+    </style>
+  </head><body>
+    <div class="header">
+      <h2>${paper.title}</h2>
+      <div class="meta">
+        <span>${course ? course.name : ''}</span>
+        <span>Total Marks: ${totalMarks}</span>
+        <span>Duration: ${paper.duration_minutes} min</span>
+      </div>
+    </div>
+    ${questions.map((q,i) => `
+      <div class="q">
+        <div class="q-num">Q${i+1}. ${q.text}</div>
+        <div class="q-meta">[${q.marks} mark${q.marks > 1 ? 's' : ''}] ${q.bloom_level ? '· ' + q.bloom_level : ''}</div>
+      </div>
+    `).join('')}
+  </body></html>`);
+  w.document.close();
+  setTimeout(() => w.print(), 400);
+}
+
+function copyText() {
+  const totalMarks = questions.reduce((s,q) => s+(q.marks||0), 0);
+  let text = `${paper.title}\nTotal Marks: ${totalMarks} | Duration: ${paper.duration_minutes} min\n\n`;
+  questions.forEach((q,i) => {
+    text += `Q${i+1}. ${q.text} [${q.marks} marks]\n`;
+  });
+  navigator.clipboard.writeText(text)
+    .then(() => showToast('Copied to clipboard!', 'success'))
+    .catch(() => showToast('Copy failed', 'error'));
+}
+
+init();
+</script>
 {% endblock %}

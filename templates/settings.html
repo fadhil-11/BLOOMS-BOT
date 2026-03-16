@@ -1,41 +1,192 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
+
+{% block title %}Settings — Blooms Bot{% endblock %}
+{% block topbar_title %}Settings{% endblock %}
+{% block topbar_actions %}
+  <button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Changes</button>
+{% endblock %}
 
 {% block content %}
-  <section class="panel">
-    <div class="panel-header">
-      <div>
-        <h2>Platform Settings</h2>
-        <p class="muted">Set defaults for generation, difficulty, and Bloom presets.</p>
-      </div>
-    </div>
+<div class="page-header">
+  <h1>Settings</h1>
+  <p class="page-header-sub">Configure defaults for paper generation</p>
+</div>
 
-    <div class="form-grid two">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:900px">
+
+  <!-- LEFT -->
+  <div>
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header"><div class="card-title">Model & Generation</div></div>
+
       <div class="form-group">
-        <label for="settings-model">Default Model</label>
-        <input id="settings-model" type="text" placeholder="gpt-4o-mini" />
+        <label class="form-label">Default GPT Model</label>
+        <select class="form-select" id="s-model">
+          <option value="gpt-4o-mini">gpt-4o-mini (Fast, Economical)</option>
+          <option value="gpt-4o">gpt-4o (Accurate, Slower)</option>
+          <option value="gpt-4-turbo">gpt-4-turbo</option>
+        </select>
       </div>
+
       <div class="form-group">
-        <label for="settings-difficulty">Default Difficulty</label>
-        <select id="settings-difficulty" class="select">
+        <label class="form-label">Default Difficulty</label>
+        <select class="form-select" id="s-difficulty">
+          <option value="mixed">Mixed</option>
           <option value="easy">Easy</option>
           <option value="medium">Medium</option>
           <option value="hard">Hard</option>
-          <option value="mixed">Mixed</option>
         </select>
       </div>
-      <div class="form-group">
-        <label for="settings-preset">Default Bloom Preset</label>
-        <select id="settings-preset" class="select"></select>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Default Bloom Preset</label>
+        <select class="form-select" id="s-preset">
+          <option value="Balanced">Balanced</option>
+          <option value="Easy">Easy</option>
+          <option value="Application">Application</option>
+          <option value="Higher Order">Higher Order</option>
+        </select>
       </div>
     </div>
 
-    <div class="form-group">
-      <label>Preset Preview</label>
-      <div class="bloom-preview" id="settings-preview"></div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">Default Bloom Distribution</div></div>
+      <div id="bloom-defaults" style="display:flex;flex-direction:column;gap:14px"></div>
+      <div id="bloom-warn" class="alert alert-warning" style="display:none;margin-top:12px">
+        ⚠ Must total 100%. Currently <span id="bloom-total">0</span>%
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div>
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header"><div class="card-title">Default Mark Distribution</div></div>
+      <div id="mark-dist-wrap" style="display:flex;flex-direction:column;gap:10px"></div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12px;color:var(--text-3)">Sections</span>
+        <button class="btn btn-ghost btn-sm" onclick="addSection()">+ Add Section</button>
+      </div>
     </div>
 
-    <div class="form-actions">
-      <button class="btn primary" type="button" id="settings-save">Save Settings</button>
+    <div class="card">
+      <div class="card-header"><div class="card-title">System Info</div></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;justify-content:space-between;font-size:13px">
+          <span style="color:var(--text-3)">Version</span>
+          <span style="font-family:var(--font-mono);color:var(--text)">1.0.0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px">
+          <span style="color:var(--text-3)">Database</span>
+          <span style="font-family:var(--font-mono);color:var(--green)">● Connected</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px">
+          <span style="color:var(--text-3)">Pipeline</span>
+          <span style="font-family:var(--font-mono);color:var(--text)">PDF → GPT → Bloom → Paper</span>
+        </div>
+      </div>
     </div>
-  </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const COLORS = {Remember:'#60a0e0',Understand:'#4caf7d',Apply:'#f5a623',Analyze:'#9b7ef8',Evaluate:'#f05454',Create:'#38d9c0'};
+let bloomDist = {};
+let markDist = [];
+
+async function load() {
+  const r = await fetch('/api/settings');
+  const d = (await r.json()).settings;
+
+  document.getElementById('s-model').value = d.default_model_name || 'gpt-4o-mini';
+  document.getElementById('s-difficulty').value = d.default_difficulty || 'mixed';
+  document.getElementById('s-preset').value = d.default_bloom_preset || 'Balanced';
+
+  bloomDist = d.default_bloom_distribution || {};
+  markDist = d.default_mark_distribution || [];
+
+  renderBloom();
+  renderMarkDist();
+}
+
+function renderBloom() {
+  const c = document.getElementById('bloom-defaults');
+  c.innerHTML = Object.entries(bloomDist).map(([level, val]) => `
+    <div class="bloom-bar">
+      <div class="bloom-bar-header">
+        <span class="bloom-bar-label" style="color:${COLORS[level]||'var(--text-2)'}">${level}</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="number" value="${val}" min="0" max="100" step="5" id="bd-${level}"
+            style="width:52px;background:var(--bg-3);border:1px solid var(--border-2);color:var(--text);border-radius:4px;padding:3px 8px;font-family:var(--font-mono);font-size:12px;text-align:center;outline:none"
+            oninput="updBloom('${level}',this.value)">
+          <span style="font-size:11px;color:var(--text-3)">%</span>
+        </div>
+      </div>
+      <div class="bloom-bar-track"><div class="bloom-bar-fill" id="bb-${level}" style="width:${val}%;background:${COLORS[level]||'var(--amber)'}"></div></div>
+    </div>`).join('');
+  checkTotal();
+}
+
+function updBloom(level, v) {
+  bloomDist[level] = Math.max(0, Math.min(100, parseInt(v)||0));
+  const b = document.getElementById(`bb-${level}`);
+  if (b) b.style.width = bloomDist[level] + '%';
+  checkTotal();
+}
+
+function checkTotal() {
+  const total = Object.values(bloomDist).reduce((a,b) => a+b, 0);
+  document.getElementById('bloom-total').textContent = total;
+  document.getElementById('bloom-warn').style.display = total !== 100 ? 'flex' : 'none';
+}
+
+function renderMarkDist() {
+  const wrap = document.getElementById('mark-dist-wrap');
+  wrap.innerHTML = markDist.map((s, i) => `
+    <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px">
+      <input type="text" value="${s.section}" class="form-input" style="padding:6px 10px;font-size:13px" oninput="markDist[${i}].section=this.value" placeholder="Section name">
+      <div style="text-align:center">
+        <div style="font-size:9px;color:var(--text-3);font-family:var(--font-mono);margin-bottom:3px">MARKS</div>
+        <input type="number" value="${s.marks_per_question}" min="1" max="100"
+          style="width:52px;background:var(--bg-3);border:1px solid var(--border-2);color:var(--text);border-radius:4px;padding:4px;font-family:var(--font-mono);font-size:12px;text-align:center;outline:none"
+          oninput="markDist[${i}].marks_per_question=parseInt(this.value)||1">
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:9px;color:var(--text-3);font-family:var(--font-mono);margin-bottom:3px">COUNT</div>
+        <input type="number" value="${s.count}" min="1" max="50"
+          style="width:52px;background:var(--bg-3);border:1px solid var(--border-2);color:var(--text);border-radius:4px;padding:4px;font-family:var(--font-mono);font-size:12px;text-align:center;outline:none"
+          oninput="markDist[${i}].count=parseInt(this.value)||1">
+      </div>
+      <button class="btn-icon" onclick="markDist.splice(${i},1);renderMarkDist()" style="color:var(--red);border-color:var(--red-dim)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>`).join('');
+}
+
+function addSection() {
+  markDist.push({ section: `Section ${String.fromCharCode(65+markDist.length)}`, marks_per_question: 5, count: 4 });
+  renderMarkDist();
+}
+
+async function saveSettings() {
+  const payload = {
+    default_model_name: document.getElementById('s-model').value,
+    default_difficulty: document.getElementById('s-difficulty').value,
+    default_bloom_preset: document.getElementById('s-preset').value,
+    default_bloom_distribution: bloomDist,
+    default_mark_distribution: markDist,
+  };
+  try {
+    const r = await fetch('/api/settings', {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+    showToast('Settings saved', 'success');
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+load();
+</script>
 {% endblock %}

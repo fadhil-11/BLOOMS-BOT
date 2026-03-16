@@ -1,77 +1,203 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
+
+{% block title %}Courses — Blooms Bot{% endblock %}
+{% block topbar_title %}Courses{% endblock %}
+{% block topbar_actions %}
+  <button class="btn btn-primary btn-sm" onclick="openModal('modal-course')">+ New Course</button>
+{% endblock %}
 
 {% block content %}
-  <section class="grid two-col">
-    <div class="panel">
-      <div class="panel-header split">
-        <div>
-          <h2>Courses</h2>
-          <p class="muted">Manage course metadata and syllabus status.</p>
-        </div>
-        <button class="btn primary" type="button" id="course-add">Add Course</button>
+<div class="page-header">
+  <h1>Courses</h1>
+  <p class="page-header-sub">Manage your courses and syllabi</p>
+</div>
+
+<div id="courses-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px">
+  <div class="empty-state" id="empty" style="display:none;grid-column:1/-1">
+    <div class="empty-icon">📚</div>
+    <div class="empty-title">No courses yet</div>
+    <div class="empty-sub">Create your first course to start generating exam papers.</div>
+    <button class="btn btn-primary" onclick="openModal('modal-course')">+ New Course</button>
+  </div>
+</div>
+
+<!-- Course Modal -->
+<div class="modal-overlay" id="modal-course">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h2 id="modal-course-title">New Course</h2>
+        <div style="font-size:13px;color:var(--text-3);margin-top:4px">Fill in the course details</div>
       </div>
-      <div class="list" id="course-list"></div>
+      <button class="modal-close" onclick="closeModal('modal-course')">×</button>
     </div>
 
-    <div class="panel">
-      <div class="panel-header split">
-        <div>
-          <h2>Topics / Units</h2>
-          <p class="muted">Organize topics under the selected course.</p>
-        </div>
-        <button class="btn ghost" type="button" id="topic-add">Add Topic</button>
-      </div>
-      <div class="list" id="topic-list"></div>
+    <input type="hidden" id="edit-course-id">
+    <div class="form-group">
+      <label class="form-label">Course Name *</label>
+      <input type="text" class="form-input" id="f-name" placeholder="e.g. Operating Systems">
     </div>
-  </section>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">Department</label>
+        <input type="text" class="form-input" id="f-dept" placeholder="Computer Science">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Semester</label>
+        <input type="text" class="form-input" id="f-sem" placeholder="Spring 2025">
+      </div>
+    </div>
 
-  <div class="modal" data-modal="course">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3 id="course-modal-title">Add Course</h3>
-        <button class="icon-btn" type="button" data-modal-close>&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="course-modal-name">Course Name</label>
-          <input id="course-modal-name" type="text" />
-        </div>
-        <div class="form-group">
-          <label for="course-modal-dept">Department</label>
-          <input id="course-modal-dept" type="text" />
-        </div>
-        <div class="form-group">
-          <label for="course-modal-sem">Semester</label>
-          <input id="course-modal-sem" type="text" />
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn secondary" type="button" data-modal-close>Cancel</button>
-        <button class="btn primary" type="button" id="course-modal-save">Save</button>
-      </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('modal-course')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCourse()">Save Course</button>
     </div>
   </div>
+</div>
 
-  <div class="modal" data-modal="topic">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3 id="topic-modal-title">Add Topic</h3>
-        <button class="icon-btn" type="button" data-modal-close>&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="topic-modal-name">Topic Name</label>
-          <input id="topic-modal-name" type="text" />
-        </div>
-        <div class="form-group">
-          <label for="topic-modal-unit">Unit Number</label>
-          <input id="topic-modal-unit" type="number" min="1" step="1" />
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn secondary" type="button" data-modal-close>Cancel</button>
-        <button class="btn primary" type="button" id="topic-modal-save">Save</button>
-      </div>
+<!-- Delete confirm -->
+<div class="modal-overlay" id="modal-delete">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h2 style="color:var(--red)">Delete Course?</h2>
+      <button class="modal-close" onclick="closeModal('modal-delete')">×</button>
+    </div>
+    <p style="color:var(--text-2);font-size:14px;margin-bottom:24px">
+      This will permanently delete the course, all its questions, and generated papers. This action cannot be undone.
+    </p>
+    <input type="hidden" id="delete-course-id">
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('modal-delete')">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">Delete Forever</button>
     </div>
   </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let courses = [];
+
+async function load() {
+  const r = await fetch('/api/courses');
+  const d = await r.json();
+  courses = d.courses || [];
+  render();
+}
+
+function render() {
+  const grid = document.getElementById('courses-grid');
+  const empty = document.getElementById('empty');
+
+  // remove old cards
+  grid.querySelectorAll('.course-card').forEach(el => el.remove());
+
+  if (!courses.length) {
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  courses.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'card course-card';
+    card.style.cssText = 'position:relative;overflow:hidden;cursor:pointer;transition:border-color 0.15s';
+    card.innerHTML = `
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--amber),var(--amber-dim))"></div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px">
+        <div style="width:40px;height:40px;background:var(--amber-glow);border:1px solid var(--amber-dim);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px">📘</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-icon" onclick="editCourse(${c.id},event)" title="Edit">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn-icon" onclick="deleteCourse(${c.id},event)" title="Delete" style="color:var(--red);border-color:var(--red-dim)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m5 0V4a1 1 0 011-1h2a1 1 0 011 1v2"/></svg>
+          </button>
+        </div>
+      </div>
+      <div style="font-family:var(--font-serif);font-size:17px;font-style:italic;margin-bottom:6px">${c.name}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+        ${c.department ? `<span class="chip">${c.department}</span>` : ''}
+        ${c.semester ? `<span class="chip">${c.semester}</span>` : ''}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding-top:14px;border-top:1px solid var(--border)">
+        <div>
+          <div style="font-size:10px;color:var(--text-3);font-family:var(--font-mono)">TOPICS</div>
+          <div style="font-size:18px;font-family:var(--font-serif);color:var(--text)">${c.topics_count}</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text-3);font-family:var(--font-mono)">QUESTIONS</div>
+          <div style="font-size:18px;font-family:var(--font-serif);color:var(--text)">${c.questions_count}</div>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text-3);font-family:var(--font-mono)">SYLLABUS</div>
+          <div style="font-size:13px;margin-top:2px">
+            ${c.has_syllabus ? '<span style="color:var(--green)">✓</span>' : '<span style="color:var(--text-3)">—</span>'}
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <a href="/upload" class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" onclick="localStorage.setItem('selectedCourse',${c.id})">
+          Generate Paper →
+        </a>
+      </div>
+    `;
+    card.addEventListener('mouseenter', () => card.style.borderColor = 'var(--border-2)');
+    card.addEventListener('mouseleave', () => card.style.borderColor = 'var(--border)');
+    grid.insertBefore(card, document.getElementById('empty'));
+  });
+}
+
+function editCourse(id, e) {
+  e.stopPropagation();
+  const c = courses.find(x => x.id === id);
+  if (!c) return;
+  document.getElementById('modal-course-title').textContent = 'Edit Course';
+  document.getElementById('edit-course-id').value = c.id;
+  document.getElementById('f-name').value = c.name;
+  document.getElementById('f-dept').value = c.department || '';
+  document.getElementById('f-sem').value = c.semester || '';
+  openModal('modal-course');
+}
+
+function deleteCourse(id, e) {
+  e.stopPropagation();
+  document.getElementById('delete-course-id').value = id;
+  openModal('modal-delete');
+}
+
+async function confirmDelete() {
+  const id = document.getElementById('delete-course-id').value;
+  await fetch(`/api/courses/${id}`, { method: 'DELETE' });
+  closeModal('modal-delete');
+  showToast('Course deleted', 'info');
+  load();
+}
+
+async function saveCourse() {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name) { showToast('Name is required', 'error'); return; }
+  const id = document.getElementById('edit-course-id').value;
+  const payload = {
+    name,
+    department: document.getElementById('f-dept').value.trim(),
+    semester: document.getElementById('f-sem').value.trim(),
+  };
+  try {
+    const url = id ? `/api/courses/${id}` : '/api/courses';
+    const method = id ? 'PUT' : 'POST';
+    const r = await fetch(url, {
+      method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+    closeModal('modal-course');
+    document.getElementById('edit-course-id').value = '';
+    document.getElementById('modal-course-title').textContent = 'New Course';
+    showToast(id ? 'Course updated' : 'Course created', 'success');
+    load();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+load();
+</script>
 {% endblock %}

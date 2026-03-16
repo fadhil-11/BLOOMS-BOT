@@ -1,105 +1,493 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
+
+{% block title %}Upload Syllabus — Blooms Bot{% endblock %}
+
+{% block topbar_title %}Upload Syllabus{% endblock %}
+{% block topbar_actions %}
+  <span style="font-size:12px;color:var(--text-3);font-family:var(--font-mono)">Step 1 of 3</span>
+{% endblock %}
 
 {% block content %}
-  <section class="grid two-col">
-    <div class="panel">
-      <div class="panel-header">
-        <div>
-          <h2>Upload Syllabus</h2>
-          <p class="muted">Follow these steps once per course to seed the question bank.</p>
+<div class="page-header">
+  <h1>Upload a Syllabus</h1>
+  <p class="page-header-sub">Select a course, upload your PDF, and start generating questions.</p>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 360px;gap:28px;align-items:start">
+
+  <!-- LEFT: FORM -->
+  <div>
+
+    <!-- STEP 1: Course -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <div class="card-title">
+          <span style="color:var(--amber);margin-right:8px">01</span>
+          Select or Create Course
         </div>
+        <button class="btn btn-ghost btn-sm" onclick="openModal('modal-new-course')">+ New Course</button>
       </div>
 
-      <div class="step-list">
-        <div class="step">
-          <div class="step-title">1. Choose a course</div>
-          <div class="form-group">
-            <label for="upload-course">Course</label>
-            <div class="inline-group">
-              <select id="upload-course" class="select"></select>
-              <button class="btn secondary" type="button" data-modal-open="course">New Course</button>
-            </div>
-            <p class="helper" id="upload-course-helper"></p>
-          </div>
-        </div>
-
-        <div class="step">
-          <div class="step-title">2. Add the syllabus PDF</div>
-          <div class="dropzone" id="upload-drop">
-            <input id="upload-file" type="file" accept="application/pdf" />
-            <div class="dropzone-content">
-              <div class="drop-icon">PDF</div>
-              <div>
-                <p class="drop-title">Drag & drop syllabus PDF</p>
-                <p class="muted">or click to browse</p>
-              </div>
-            </div>
-          </div>
-          <div class="file-meta" id="upload-file-meta">No file selected.</div>
-        </div>
-
-        <div class="step">
-          <div class="step-title">3. Optional configuration</div>
-          <div class="form-group">
-            <label for="upload-config">Paper configuration</label>
-            <select id="upload-config" class="select"></select>
-            <p class="helper" id="upload-config-helper"></p>
-          </div>
-        </div>
+      <div class="form-group">
+        <label class="form-label">Course</label>
+        <select class="form-select" id="select-course">
+          <option value="">— Choose a course —</option>
+        </select>
       </div>
 
-      <div class="form-actions">
-        <button class="btn primary block" id="upload-start" type="button">Generate from syllabus</button>
-        <p class="helper">You can refine the paper later in the Generate page.</p>
+      <div id="course-details" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:14px;background:var(--bg-2);border-radius:var(--radius);border:1px solid var(--border)">
+          <div>
+            <div style="font-size:10px;color:var(--text-3);font-family:var(--font-mono);margin-bottom:4px">DEPARTMENT</div>
+            <div style="font-size:13px;color:var(--text-2)" id="cd-dept">—</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-3);font-family:var(--font-mono);margin-bottom:4px">SEMESTER</div>
+            <div style="font-size:13px;color:var(--text-2)" id="cd-sem">—</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-3);font-family:var(--font-mono);margin-bottom:4px">QUESTIONS</div>
+            <div style="font-size:13px;color:var(--text-2)" id="cd-qcount">—</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-3);font-family:var(--font-mono);margin-bottom:4px">SYLLABUS</div>
+            <div style="font-size:13px" id="cd-syllabus">—</div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-header">
-        <div>
-          <h2>Generation Status</h2>
-          <p class="muted">Monitor pipeline progress as it extracts, generates, and classifies.</p>
+    <!-- STEP 2: PDF Upload -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <div class="card-title">
+          <span style="color:var(--amber);margin-right:8px">02</span>
+          Upload Syllabus PDF
         </div>
       </div>
 
-      <div class="status-card">
-        <div class="status-pill" id="upload-status">Idle</div>
-        <div class="progress">
-          <div class="progress-bar" id="upload-progress"></div>
+      <div id="drop-zone"
+        style="border:2px dashed var(--border-2);border-radius:var(--radius-lg);padding:48px;text-align:center;cursor:pointer;transition:all 0.2s;position:relative"
+        onclick="document.getElementById('pdf-input').click()"
+        ondragover="handleDragOver(event)"
+        ondragleave="handleDragLeave(event)"
+        ondrop="handleDrop(event)">
+        <input type="file" id="pdf-input" accept=".pdf" style="display:none" onchange="handleFileSelect(event)">
+        <div id="drop-content">
+          <div style="font-size:40px;margin-bottom:16px;opacity:0.4">📄</div>
+          <div style="font-size:15px;color:var(--text-2);margin-bottom:6px">Drop your PDF here</div>
+          <div style="font-size:12px;color:var(--text-3)">or click to browse · PDF files only</div>
         </div>
-        <div class="status-meta">
-          <span id="upload-step">Waiting for input</span>
-          <span id="upload-percent">0%</span>
+        <div id="file-selected" style="display:none">
+          <div style="font-size:36px;margin-bottom:12px">✅</div>
+          <div style="font-size:14px;color:var(--text);font-weight:500" id="file-name-display"></div>
+          <div style="font-size:12px;color:var(--text-3);margin-top:4px" id="file-size-display"></div>
+          <button onclick="clearFile(event)" style="margin-top:12px;background:none;border:1px solid var(--border-2);color:var(--text-3);padding:4px 12px;border-radius:var(--radius);cursor:pointer;font-size:12px">Remove</button>
         </div>
-        <div class="status-debug" id="upload-debug"></div>
       </div>
     </div>
-  </section>
 
-  <div class="modal" data-modal="course">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3>Create Course</h3>
-        <button class="icon-btn" type="button" data-modal-close>&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="course-name">Course Name</label>
-          <input id="course-name" type="text" placeholder="Data Structures" />
+    <!-- STEP 3: Paper Config -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <div class="card-title">
+          <span style="color:var(--amber);margin-right:8px">03</span>
+          Paper Configuration
         </div>
-        <div class="form-group">
-          <label for="course-dept">Department</label>
-          <input id="course-dept" type="text" placeholder="Computer Science" />
-        </div>
-        <div class="form-group">
-          <label for="course-semester">Semester</label>
-          <input id="course-semester" type="text" placeholder="Spring 2026" />
+        <div style="display:flex;gap:8px">
+          <span style="font-size:11px;color:var(--text-3);align-self:center">Preset:</span>
+          <select class="form-select" id="preset-select" style="width:auto;padding:5px 32px 5px 10px;font-size:12px" onchange="applyPreset(this.value)">
+            <option value="Balanced">Balanced</option>
+            <option value="Easy">Easy</option>
+            <option value="Application">Application</option>
+            <option value="Higher Order">Higher Order</option>
+          </select>
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn secondary" type="button" data-modal-close>Cancel</button>
-        <button class="btn primary" type="button" id="course-save">Save Course</button>
+
+      <div class="grid-2" style="margin-bottom:20px">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Total Marks</label>
+          <input type="number" class="form-input" id="total-marks" value="50" min="10" max="200">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Duration (minutes)</label>
+          <input type="number" class="form-input" id="duration" value="90" min="30" max="300">
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Bloom's Distribution (%)</label>
+        <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:14px" id="bloom-sliders">
+        </div>
+        <div id="bloom-total-warning" style="display:none;margin-top:8px" class="alert alert-warning">
+          ⚠ Distribution must total 100%. Currently: <span id="bloom-pct-total">0</span>%
+        </div>
+      </div>
+    </div>
+
+    <!-- SUBMIT -->
+    <button class="btn btn-primary" id="btn-generate" onclick="startGenerate()" style="width:100%;justify-content:center;padding:14px;font-size:15px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+      Generate Question Paper
+    </button>
+
+  </div>
+
+  <!-- RIGHT: INFO PANEL -->
+  <div>
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <div class="card-title">Pipeline</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0">
+        {% set steps = [
+          ('PDF Extraction', 'Extracts raw text from your syllabus'),
+          ('Chunking', 'Splits text into 500–800 word segments'),
+          ('Question Generation', 'GPT generates raw questions per chunk'),
+          ('Validation', 'Hard-rejects low-quality questions'),
+          ('Bloom Classification', 'GPT assigns Bloom taxonomy levels'),
+          ('Paper Assembly', 'Constraint-based paper selection'),
+        ] %}
+        {% for name, desc in steps %}
+        <div style="display:flex;gap:12px;padding:12px 0;{% if not loop.last %}border-bottom:1px solid var(--border){% endif %}">
+          <div style="width:22px;height:22px;border-radius:50%;background:var(--amber-glow);border:1px solid var(--amber-dim);color:var(--amber);font-size:10px;font-family:var(--font-mono);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px">{{ loop.index }}</div>
+          <div>
+            <div style="font-size:13px;font-weight:500;color:var(--text)">{{ name }}</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:2px">{{ desc }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Bloom's Levels</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        {% for level, color in [('Remember','#60a0e0'),('Understand','#4caf7d'),('Apply','#f5a623'),('Analyze','#9b7ef8'),('Evaluate','#f05454'),('Create','#38d9c0')] %}
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:8px;height:8px;border-radius:50%;background:{{ color }};flex-shrink:0"></div>
+          <span style="font-size:13px;color:var(--text-2);flex:1">{{ level }}</span>
+          <span style="font-size:10px;color:var(--text-3);font-family:var(--font-mono)">L{{ loop.index }}</span>
+        </div>
+        {% endfor %}
       </div>
     </div>
   </div>
+
+</div>
+
+<!-- PROGRESS OVERLAY -->
+<div id="progress-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:300;display:none;align-items:center;justify-content:center;backdrop-filter:blur(8px)">
+  <div style="background:var(--bg-1);border:1px solid var(--border-2);border-radius:var(--radius-lg);padding:40px;width:480px;box-shadow:0 20px 60px rgba(0,0,0,0.6)">
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:28px">
+      <div class="loader"></div>
+      <div>
+        <div style="font-family:var(--font-serif);font-size:18px;font-style:italic">Generating your paper…</div>
+        <div style="font-size:12px;color:var(--text-3);margin-top:4px">This may take 30–90 seconds</div>
+      </div>
+    </div>
+
+    <div class="progress-wrap" style="margin-bottom:10px">
+      <div class="progress-fill" id="prog-bar" style="width:0%"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between">
+      <div style="font-size:12px;color:var(--text-2)" id="prog-step">Initializing…</div>
+      <div style="font-size:12px;color:var(--text-3);font-family:var(--font-mono)" id="prog-pct">0%</div>
+    </div>
+
+    <div style="margin-top:24px;padding:14px;background:var(--bg-2);border-radius:var(--radius);border:1px solid var(--border)">
+      <div style="font-size:10px;color:var(--text-3);font-family:var(--font-mono);letter-spacing:1px;margin-bottom:10px">LIVE STATS</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px" id="live-stats">
+        <div><div style="font-size:10px;color:var(--text-3);font-family:var(--font-mono)">CHUNKS</div><div style="font-size:18px;color:var(--text);font-family:var(--font-serif)" id="stat-chunks">—</div></div>
+        <div><div style="font-size:10px;color:var(--text-3);font-family:var(--font-mono)">GENERATED</div><div style="font-size:18px;color:var(--text);font-family:var(--font-serif)" id="stat-gen">—</div></div>
+        <div><div style="font-size:10px;color:var(--text-3);font-family:var(--font-mono)">ACCEPTED</div><div style="font-size:18px;color:var(--amber);font-family:var(--font-serif)" id="stat-acc">—</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NEW COURSE MODAL -->
+<div class="modal-overlay" id="modal-new-course">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h2>New Course</h2>
+        <div style="font-size:13px;color:var(--text-3);margin-top:4px">Add a course to your workspace</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-new-course')">×</button>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Course Name *</label>
+      <input type="text" class="form-input" id="nc-name" placeholder="e.g. Data Structures & Algorithms">
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">Department</label>
+        <input type="text" class="form-input" id="nc-dept" placeholder="Computer Science">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Semester</label>
+        <input type="text" class="form-input" id="nc-sem" placeholder="Fall 2025">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('modal-new-course')">Cancel</button>
+      <button class="btn btn-primary" onclick="createCourse()">Create Course</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const BLOOM_LEVELS = ['Remember','Understand','Apply','Analyze','Evaluate','Create'];
+const BLOOM_COLORS = {
+  Remember:'#60a0e0',Understand:'#4caf7d',Apply:'#f5a623',
+  Analyze:'#9b7ef8',Evaluate:'#f05454',Create:'#38d9c0'
+};
+const PRESETS = {
+  Balanced:   {Remember:20,Understand:30,Apply:30,Analyze:15,Evaluate:5,Create:0},
+  Easy:       {Remember:30,Understand:35,Apply:20,Analyze:10,Evaluate:5,Create:0},
+  Application:{Remember:15,Understand:20,Apply:40,Analyze:20,Evaluate:5,Create:0},
+  'Higher Order':{Remember:10,Understand:20,Apply:25,Analyze:25,Evaluate:15,Create:5},
+};
+
+let currentDist = {...PRESETS.Balanced};
+let selectedCourseId = null;
+let courses = [];
+
+// ─── INIT ─────────────────────────────────────────────
+async function init() {
+  renderSliders();
+  await loadCourses();
+}
+
+async function loadCourses() {
+  try {
+    const r = await fetch('/api/courses');
+    const d = await r.json();
+    courses = d.courses || [];
+    const sel = document.getElementById('select-course');
+    sel.innerHTML = '<option value="">— Choose a course —</option>';
+    courses.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.id;
+      o.textContent = c.name;
+      sel.appendChild(o);
+    });
+    sel.onchange = () => selectCourse(parseInt(sel.value));
+  } catch(e) {}
+}
+
+function selectCourse(id) {
+  selectedCourseId = id || null;
+  const c = courses.find(x => x.id === id);
+  const det = document.getElementById('course-details');
+  if (!c) { det.style.display = 'none'; return; }
+  det.style.display = 'block';
+  document.getElementById('cd-dept').textContent = c.department || '—';
+  document.getElementById('cd-sem').textContent = c.semester || '—';
+  document.getElementById('cd-qcount').textContent = c.questions_count;
+  const hasSyllabus = c.has_syllabus;
+  document.getElementById('cd-syllabus').innerHTML = hasSyllabus
+    ? '<span style="color:var(--green)">✓ Available</span>'
+    : '<span style="color:var(--text-3)">Not uploaded</span>';
+}
+
+// ─── SLIDERS ──────────────────────────────────────────
+function renderSliders() {
+  const container = document.getElementById('bloom-sliders');
+  container.innerHTML = '';
+  BLOOM_LEVELS.forEach(level => {
+    const val = currentDist[level] || 0;
+    const color = BLOOM_COLORS[level];
+    container.innerHTML += `
+      <div class="bloom-bar">
+        <div class="bloom-bar-header">
+          <span class="bloom-bar-label" style="color:${color}">${level}</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="number" value="${val}" min="0" max="100" step="5"
+              style="width:56px;background:var(--bg-3);border:1px solid var(--border-2);color:var(--text);border-radius:4px;padding:3px 8px;font-family:var(--font-mono);font-size:12px;text-align:center;outline:none"
+              oninput="updateBloom('${level}', this.value)" id="num-${level}">
+            <span class="bloom-bar-pct">%</span>
+          </div>
+        </div>
+        <div class="bloom-bar-track">
+          <div class="bloom-bar-fill" id="bar-${level}" style="width:${val}%;background:${color}"></div>
+        </div>
+      </div>`;
+  });
+  checkBloomTotal();
+}
+
+function updateBloom(level, value) {
+  currentDist[level] = Math.max(0, Math.min(100, parseInt(value) || 0));
+  document.getElementById(`bar-${level}`).style.width = currentDist[level] + '%';
+  checkBloomTotal();
+}
+
+function checkBloomTotal() {
+  const total = Object.values(currentDist).reduce((a,b) => a+b, 0);
+  const warn = document.getElementById('bloom-total-warning');
+  document.getElementById('bloom-pct-total').textContent = total;
+  warn.style.display = total !== 100 ? 'flex' : 'none';
+}
+
+function applyPreset(name) {
+  currentDist = {...PRESETS[name]};
+  BLOOM_LEVELS.forEach(level => {
+    const num = document.getElementById(`num-${level}`);
+    const bar = document.getElementById(`bar-${level}`);
+    if (num) num.value = currentDist[level];
+    if (bar) bar.style.width = currentDist[level] + '%';
+  });
+  checkBloomTotal();
+}
+
+// ─── FILE UPLOAD ──────────────────────────────────────
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').style.borderColor = 'var(--amber)';
+  document.getElementById('drop-zone').style.background = 'var(--amber-glow)';
+}
+
+function handleDragLeave(e) {
+  document.getElementById('drop-zone').style.borderColor = 'var(--border-2)';
+  document.getElementById('drop-zone').style.background = '';
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  handleDragLeave(e);
+  const files = e.dataTransfer.files;
+  if (files.length > 0) setFile(files[0]);
+}
+
+function handleFileSelect(e) {
+  if (e.target.files.length > 0) setFile(e.target.files[0]);
+}
+
+function setFile(file) {
+  if (!file.name.endsWith('.pdf')) {
+    showToast('Only PDF files are supported', 'error');
+    return;
+  }
+  document.getElementById('drop-content').style.display = 'none';
+  document.getElementById('file-selected').style.display = 'block';
+  document.getElementById('file-name-display').textContent = file.name;
+  document.getElementById('file-size-display').textContent = (file.size / 1024).toFixed(0) + ' KB';
+}
+
+function clearFile(e) {
+  e.stopPropagation();
+  document.getElementById('pdf-input').value = '';
+  document.getElementById('file-selected').style.display = 'none';
+  document.getElementById('drop-content').style.display = 'block';
+}
+
+// ─── GENERATE ─────────────────────────────────────────
+async function startGenerate() {
+  if (!selectedCourseId) {
+    showToast('Please select a course first', 'error'); return;
+  }
+  const file = document.getElementById('pdf-input').files[0];
+  const total = Object.values(currentDist).reduce((a,b) => a+b, 0);
+  if (total !== 100) {
+    showToast('Bloom distribution must total 100%', 'error'); return;
+  }
+
+  const form = new FormData();
+  form.append('course_id', selectedCourseId);
+  if (file) form.append('syllabus_pdf', file);
+  form.append('config', JSON.stringify({
+    total_marks: parseInt(document.getElementById('total-marks').value) || 50,
+    duration_minutes: parseInt(document.getElementById('duration').value) || 90,
+    bloom_distribution: currentDist,
+  }));
+
+  // Show overlay
+  const overlay = document.getElementById('progress-overlay');
+  overlay.style.display = 'flex';
+
+  try {
+    const r = await fetch('/api/generate', { method: 'POST', body: form });
+    const d = await r.json();
+    if (!d.job_id) throw new Error(d.error || 'Failed to start job');
+    pollJob(d.job_id);
+  } catch(e) {
+    overlay.style.display = 'none';
+    showToast(e.message, 'error');
+  }
+}
+
+function pollJob(jobId) {
+  const interval = setInterval(async () => {
+    try {
+      const r = await fetch(`/api/jobs/${jobId}`);
+      const d = await r.json();
+      updateProgress(d);
+      if (d.status === 'done') {
+        clearInterval(interval);
+        const paperId = d.result?.generated_paper_id;
+        setTimeout(() => {
+          location.href = paperId ? `/review/${paperId}` : '/papers';
+        }, 600);
+      } else if (d.status === 'error') {
+        clearInterval(interval);
+        document.getElementById('progress-overlay').style.display = 'none';
+        showToast(d.error || 'Generation failed', 'error');
+      }
+    } catch(e) {}
+  }, 1200);
+}
+
+function updateProgress(d) {
+  const pct = d.progress || 0;
+  document.getElementById('prog-bar').style.width = pct + '%';
+  document.getElementById('prog-pct').textContent = pct + '%';
+  document.getElementById('prog-step').textContent = d.current_step || '…';
+  const stats = d.debug || {};
+  if (stats.chunks_created) document.getElementById('stat-chunks').textContent = stats.chunks_created;
+  if (stats.raw_questions_generated) document.getElementById('stat-gen').textContent = stats.raw_questions_generated;
+  if (stats.accepted_questions) document.getElementById('stat-acc').textContent = stats.accepted_questions;
+}
+
+// ─── CREATE COURSE ────────────────────────────────────
+async function createCourse() {
+  const name = document.getElementById('nc-name').value.trim();
+  if (!name) { showToast('Course name is required', 'error'); return; }
+  try {
+    const r = await fetch('/api/courses', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        name,
+        department: document.getElementById('nc-dept').value.trim(),
+        semester: document.getElementById('nc-sem').value.trim(),
+      })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    closeModal('modal-new-course');
+    showToast('Course created', 'success');
+    document.getElementById('nc-name').value = '';
+    document.getElementById('nc-dept').value = '';
+    document.getElementById('nc-sem').value = '';
+    await loadCourses();
+    document.getElementById('select-course').value = d.course.id;
+    selectCourse(d.course.id);
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
+}
+
+init();
+</script>
 {% endblock %}
