@@ -20,7 +20,7 @@ from datetime import datetime
 from io import BytesIO
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
+from flask import Flask, abort, jsonify, render_template, request
 from flask_sqlalchemy import SQLAlchemy
 
 from pdf_processor import extract_text_from_pdf
@@ -708,11 +708,19 @@ def create_app() -> Flask:
 
     @app.route("/")
     def root():
-        return redirect(url_for("login"))
+        return render_template("landing.html", page="landing", title="Blooms Bot")
+
+    @app.route("/landing")
+    def landing():
+        return render_template("landing.html", page="landing", title="Blooms Bot")
 
     @app.route("/login")
     def login():
         return render_template("login.html", page="login", title="Sign In")
+
+    @app.route("/signup")
+    def signup():
+        return render_template("signup.html", page="signup", title="Sign Up")
 
     @app.route("/upload")
     def upload():

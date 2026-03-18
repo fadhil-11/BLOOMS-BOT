@@ -3,88 +3,121 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sign In — Blooms Bot</title>
+  <title>Sign In - Blooms Bot</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg:#0d0f14; --bg-1:#13161e; --bg-2:#191d28; --bg-3:#1f2435;
-      --border:#252b3b; --border-2:#2e3650;
-      --text:#e8eaf0; --text-2:#a0a8c0; --text-3:#606880;
-      --amber:#f5a623; --amber-glow:#f5a62322;
-      --font-serif:'Libre Baskerville',Georgia,serif;
-      --font-sans:'Outfit',sans-serif;
-      --font-mono:'DM Mono',monospace;
-      --radius:6px;
-    }
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    body {
-      background: var(--bg);
-      min-height: 100vh;
-      display: flex;
-      font-family: var(--font-sans);
-      color: var(--text);
-      overflow: hidden;
+      --bg: #0d0f14;
+      --bg-1: #13161e;
+      --bg-2: #191d28;
+      --border: #252b3b;
+      --border-2: #2e3650;
+      --text: #e8eaf0;
+      --text-2: #a0a8c0;
+      --text-3: #606880;
+      --amber: #f5a623;
+      --amber-glow: rgba(245, 166, 35, 0.15);
+      --font-serif: "Libre Baskerville", Georgia, serif;
+      --font-sans: "Outfit", sans-serif;
+      --font-mono: "DM Mono", monospace;
+      --radius: 7px;
+      --transition: 150ms ease;
     }
 
-    /* ─── LEFT PANEL ─── */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      overflow: hidden;
+      font-family: var(--font-sans);
+      color: var(--text);
+      background: var(--bg);
+    }
+
     .login-left {
       flex: 1;
+      padding: 60px;
       display: flex;
       flex-direction: column;
       justify-content: center;
-      padding: 64px;
       position: relative;
     }
 
     .login-left::after {
-      content: '';
+      content: "";
       position: absolute;
-      top: 0; bottom: 0; right: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
       width: 1px;
       background: linear-gradient(to bottom, transparent, var(--border) 20%, var(--border) 80%, transparent);
     }
 
     .brand {
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      gap: 14px;
-      margin-bottom: 56px;
+      gap: 12px;
+      margin-bottom: 48px;
+      color: inherit;
+      text-decoration: none;
     }
 
     .brand-icon {
-      width: 44px; height: 44px;
-      background: var(--amber);
+      width: 42px;
+      height: 42px;
       border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 22px;
+      background: var(--amber);
+      color: #121923;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 8px 18px rgba(245, 166, 35, 0.24);
+    }
+
+    .brand-icon svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     .brand-name {
       font-family: var(--font-serif);
       font-size: 24px;
       font-style: italic;
+      line-height: 1;
     }
 
-    .brand-name span { color: var(--amber); }
+    .brand-name span {
+      color: var(--amber);
+    }
 
     .hero-eyebrow {
       font-family: var(--font-mono);
       font-size: 10px;
-      letter-spacing: 3px;
+      letter-spacing: 2.8px;
       text-transform: uppercase;
       color: var(--amber);
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
 
     .hero-title {
       font-family: var(--font-serif);
-      font-size: 42px;
-      font-weight: 700;
+      font-size: 40px;
       font-style: italic;
+      font-weight: 700;
       line-height: 1.2;
-      margin-bottom: 20px;
-      color: var(--text);
+      margin-bottom: 18px;
+      max-width: 14ch;
     }
 
     .hero-title em {
@@ -93,49 +126,43 @@
     }
 
     .hero-desc {
+      max-width: 48ch;
       font-size: 15px;
-      color: var(--text-3);
       line-height: 1.7;
-      max-width: 380px;
-      margin-bottom: 40px;
+      color: var(--text-3);
+      margin-bottom: 34px;
     }
 
     .feature-list {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
+      display: grid;
+      gap: 12px;
+      max-width: 52ch;
     }
 
     .feature-item {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       font-size: 13px;
       color: var(--text-2);
+      line-height: 1.5;
     }
 
     .feature-dot {
-      width: 6px; height: 6px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       background: var(--amber);
       flex-shrink: 0;
     }
 
-    /* ─── BLOOM PYRAMID ─── */
-    .pyramid {
-      position: absolute;
-      bottom: 60px; left: 64px;
-      opacity: 0.06;
-    }
-
-    /* ─── RIGHT PANEL ─── */
     .login-right {
-      width: 480px;
+      width: 460px;
+      padding: 58px 52px;
+      background: var(--bg-1);
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 64px 56px;
-      background: var(--bg-1);
     }
 
     .login-form-wrap {
@@ -144,41 +171,47 @@
 
     .login-form-title {
       font-family: var(--font-serif);
-      font-size: 26px;
+      font-size: 27px;
       font-style: italic;
       margin-bottom: 6px;
     }
 
     .login-form-sub {
+      margin-bottom: 30px;
       font-size: 13px;
       color: var(--text-3);
-      margin-bottom: 36px;
     }
 
-    .form-group { margin-bottom: 18px; }
+    .form-group {
+      margin-bottom: 16px;
+    }
 
     .form-label {
       display: block;
+      margin-bottom: 8px;
+      font-family: var(--font-mono);
       font-size: 10px;
       font-weight: 600;
-      letter-spacing: 1.5px;
+      letter-spacing: 1.4px;
       text-transform: uppercase;
       color: var(--text-3);
-      font-family: var(--font-mono);
-      margin-bottom: 8px;
     }
 
     .form-input {
       width: 100%;
-      background: var(--bg-2);
       border: 1px solid var(--border-2);
-      color: var(--text);
       border-radius: var(--radius);
-      padding: 12px 16px;
+      background: var(--bg-2);
+      color: var(--text);
+      padding: 12px 14px;
       font-family: var(--font-sans);
       font-size: 14px;
+      transition: border-color var(--transition), box-shadow var(--transition);
       outline: none;
-      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .form-input::placeholder {
+      color: var(--text-3);
     }
 
     .form-input:focus {
@@ -186,42 +219,53 @@
       box-shadow: 0 0 0 3px var(--amber-glow);
     }
 
-    .form-input::placeholder { color: var(--text-3); }
-
     .login-btn {
       width: 100%;
-      padding: 13px;
-      background: var(--amber);
-      color: #0d0f14;
       border: none;
       border-radius: var(--radius);
-      font-family: var(--font-sans);
+      background: var(--amber);
+      color: #0d0f14;
+      padding: 13px;
       font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.15s;
-      margin-top: 8px;
+      font-weight: 700;
+      font-family: var(--font-sans);
       letter-spacing: 0.3px;
+      cursor: pointer;
+      transition: transform var(--transition), box-shadow var(--transition), background var(--transition);
+      margin-top: 6px;
     }
 
     .login-btn:hover {
-      background: #f7b84a;
       transform: translateY(-1px);
+      background: #f7b84a;
       box-shadow: 0 6px 20px var(--amber-glow);
+    }
+
+    .login-btn.secondary {
+      margin-top: 10px;
+      background: transparent;
+      color: var(--amber);
+      border: 1px solid var(--amber);
+      box-shadow: none;
+    }
+
+    .login-btn.secondary:hover {
+      background: rgba(245, 166, 35, 0.08);
     }
 
     .login-divider {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       margin: 24px 0;
       color: var(--text-3);
-      font-size: 12px;
       font-family: var(--font-mono);
+      font-size: 12px;
     }
 
-    .login-divider::before, .login-divider::after {
-      content: '';
+    .login-divider::before,
+    .login-divider::after {
+      content: "";
       flex: 1;
       height: 1px;
       background: var(--border);
@@ -231,75 +275,117 @@
       display: flex;
       gap: 6px;
       justify-content: center;
-      margin-top: 32px;
     }
 
     .bloom-pip {
       flex: 1;
       height: 3px;
       border-radius: 2px;
-      opacity: 0.5;
+      opacity: 0.6;
+    }
+
+    @media (max-width: 980px) {
+      body {
+        overflow: auto;
+      }
+
+      .login-left {
+        display: none;
+      }
+
+      .login-right {
+        width: 100%;
+        min-height: 100vh;
+        padding: 34px 22px;
+        background: var(--bg);
+      }
     }
   </style>
 </head>
 <body>
+  <section class="login-left">
+    <a class="brand" href="/landing">
+      <span class="brand-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 5v14"></path>
+          <path d="M5 8.5c2.3-1.1 4.7-1.7 7-1.7s4.7.6 7 1.7v9c-2.3-1.1-4.7-1.7-7-1.7s-4.7.6-7 1.7z"></path>
+          <path d="M9 11h6"></path>
+        </svg>
+      </span>
+      <span class="brand-name"><span>Blooms</span> Bot</span>
+    </a>
 
-  <div class="login-left">
-    <div class="brand">
-      <div class="brand-icon">📐</div>
-      <div class="brand-name"><span>Blooms</span> Bot</div>
-    </div>
-
-    <div class="hero-eyebrow">AI-Powered Assessment</div>
+    <div class="hero-eyebrow">AI Powered Assessment</div>
     <h1 class="hero-title">
-      Intelligent exam<br>papers, <em>instantly</em>
+      Intelligent exam papers, <em>instantly</em>
     </h1>
     <p class="hero-desc">
-      Upload your syllabus PDF and generate Bloom's Taxonomy–aligned question papers with AI in minutes, not hours.
+      Upload your syllabus PDF and generate Bloom aligned question papers with AI in minutes.
+      Keep your paper quality consistent while reducing manual effort.
     </p>
 
     <div class="feature-list">
       <div class="feature-item">
-        <div class="feature-dot"></div>
-        Automated Bloom's Taxonomy classification
+        <span class="feature-dot"></span>
+        Automated Bloom taxonomy classification
       </div>
       <div class="feature-item">
-        <div class="feature-dot"></div>
-        Constraint-based paper generation with mark distribution
+        <span class="feature-dot"></span>
+        Constraint based paper generation with mark distribution
       </div>
       <div class="feature-item">
-        <div class="feature-dot"></div>
-        Question bank management across courses
+        <span class="feature-dot"></span>
+        Question bank management across courses and topics
       </div>
       <div class="feature-item">
-        <div class="feature-dot"></div>
-        Review, revise, and export with one click
+        <span class="feature-dot"></span>
+        Review, revise, and export from one workflow
       </div>
     </div>
-  </div>
+  </section>
 
-  <div class="login-right">
+  <section class="login-right">
     <div class="login-form-wrap">
       <h2 class="login-form-title">Welcome back</h2>
-      <p class="login-form-sub">Sign in to your account to continue</p>
+      <p class="login-form-sub">Sign in to continue to your workspace</p>
 
-      <div class="form-group">
-        <label class="form-label">Email address</label>
-        <input type="email" class="form-input" placeholder="faculty@university.edu" />
-      </div>
+      <form id="login-form" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="login-email">Email Address</label>
+          <input
+            id="login-email"
+            type="email"
+            class="form-input"
+            placeholder="faculty@university.edu"
+            autocomplete="email"
+          />
+        </div>
 
-      <div class="form-group">
-        <label class="form-label">Password</label>
-        <input type="password" class="form-input" placeholder="••••••••••" />
-      </div>
+        <div class="form-group">
+          <label class="form-label" for="login-password">Password</label>
+          <input
+            id="login-password"
+            type="password"
+            class="form-input"
+            placeholder="Enter your password"
+            autocomplete="current-password"
+          />
+        </div>
 
-      <button class="login-btn" onclick="location.href='/upload'">
-        Sign In →
+        <button id="login-submit" class="login-btn" type="submit">Sign In -></button>
+      </form>
+
+      <button
+        class="login-btn secondary"
+        type="button"
+        onclick="window.location.href='/signup'"
+      >
+        Sign Up
       </button>
 
-      <div class="login-divider">Bloom's Taxonomy Levels</div>
+      <div class="login-divider">Bloom Taxonomy Levels</div>
 
-      <div class="bloom-levels">
+      <div class="bloom-levels" aria-hidden="true">
         <div class="bloom-pip" style="background:#60a0e0" title="Remember"></div>
         <div class="bloom-pip" style="background:#4caf7d" title="Understand"></div>
         <div class="bloom-pip" style="background:#f5a623" title="Apply"></div>
@@ -308,7 +394,35 @@
         <div class="bloom-pip" style="background:#38d9c0" title="Create"></div>
       </div>
     </div>
-  </div>
+  </section>
 
+  <script>
+    (() => {
+      const loginForm = document.getElementById("login-form");
+      const emailInput = document.getElementById("login-email");
+      const passwordInput = document.getElementById("login-password");
+
+      if (!loginForm || !emailInput || !passwordInput) return;
+
+      emailInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          passwordInput.focus();
+        }
+      });
+
+      passwordInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          loginForm.requestSubmit();
+        }
+      });
+
+      loginForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        window.location.href = "/upload";
+      });
+    })();
+  </script>
 </body>
 </html>
