@@ -849,6 +849,8 @@ def create_app() -> Flask:
     @app.route("/login", methods=["GET", "POST"])
     def login():
         if request.method == "GET":
+            if request.args.get("fresh") == "1":
+                session.clear()
             if _is_authenticated():
                 return redirect(_resolve_next_path("upload"))
             info_message = None
@@ -917,6 +919,8 @@ def create_app() -> Flask:
     @app.route("/signup", methods=["GET", "POST"])
     def signup():
         if request.method == "GET":
+            if request.args.get("fresh") == "1":
+                session.clear()
             if _is_authenticated():
                 return redirect(_resolve_next_path("upload"))
             return render_template(
