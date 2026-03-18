@@ -38,8 +38,28 @@ function getCourse() {
   return courses.find(c => c.id === paper.course_id);
 }
 
+function normalizePaperTitle(rawTitle, fallbackTitle) {
+  const fallback = String(fallbackTitle || 'Question Paper').trim() || 'Question Paper';
+  const title = String(rawTitle || '').trim();
+  if (!title) return fallback;
+
+  const revisedGenerated = /^revised\s*[-:]\s*generated\s+paper\s*[-:]\s*(.+)$/i.exec(title);
+  if (revisedGenerated && revisedGenerated[1]) {
+    return `Revised - ${revisedGenerated[1].trim()}`;
+  }
+
+  const withoutPrefix = title.replace(/^generated\s+paper\s*[-:]\s*/i, '').trim();
+  if (!withoutPrefix || /^generated\s+paper$/i.test(withoutPrefix)) return fallback;
+  return withoutPrefix;
+}
+
+function getDisplayPaperTitle(course) {
+  return normalizePaperTitle(paper?.title, course?.name || 'Question Paper');
+}
+
 function render() {
   const course = getCourse();
+  const displayTitle = getDisplayPaperTitle(course);
   const totalMarks = questions.reduce((s,q) => s + (q.marks||0), 0);
 
   // Bloom distribution
@@ -53,8 +73,8 @@ function render() {
     <div class="card" style="margin-bottom:24px;border-left:3px solid var(--amber)">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px">
         <div>
-          <div style="font-size:11px;color:var(--text-3);font-family:var(--font-mono);letter-spacing:1px;margin-bottom:6px">GENERATED PAPER</div>
-          <h1 style="margin-bottom:8px">${paper.title}</h1>
+          <div style="font-size:11px;color:var(--text-3);font-family:var(--font-mono);letter-spacing:1px;margin-bottom:6px">QUESTION PAPER</div>
+          <h1 style="margin-bottom:8px">${displayTitle}</h1>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
             ${course ? `<span class="chip">📘 ${course.name}</span>` : ''}
             <span class="chip">⏱ ${paper.duration_minutes} min</span>
@@ -222,43 +242,283 @@ async function saveRevisions() {
   } catch(e) { showToast(e.message, 'error'); }
 }
 
-function printPaper() {
-  const course = getCourse();
-  const totalMarks = questions.reduce((s,q) => s+(q.marks||0), 0);
-  const w = window.open('', '_blank');
-  w.document.write(`<!DOCTYPE html><html><head>
-    <style>
-      body{font-family:Georgia,serif;max-width:800px;margin:40px auto;padding:20px;color:#111;line-height:1.6}
-      .header{border-bottom:2px solid #111;padding-bottom:16px;margin-bottom:24px;text-align:center}
-      .meta{display:flex;justify-content:space-between;font-size:13px;margin-top:10px;color:#555}
-      .q{margin-bottom:20px;padding:12px;border-left:3px solid #ccc}
-      .q-num{font-weight:bold;color:#111}
-      .q-meta{font-size:12px;color:#888;margin-top:6px}
-      @media print{body{margin:20px}}
-    </style>
-  </head><body>
-    <div class="header">
-      <h2>${paper.title}</h2>
-      <div class="meta">
-        <span>${course ? course.name : ''}</span>
-        <span>Total Marks: ${totalMarks}</span>
-        <span>Duration: ${paper.duration_minutes} min</span>
-      </div>
-    </div>
-    ${questions.map((q,i) => `
-      <div class="q">
-        <div class="q-num">Q${i+1}. ${q.text}</div>
-        <div class="q-meta">[${q.marks} mark${q.marks > 1 ? 's' : ''}] ${q.bloom_level ? '· ' + q.bloom_level : ''}</div>
-      </div>
-    `).join('')}
-  </body></html>`);
-  w.document.close();
-  setTimeout(() => w.print(), 400);
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
+function formatQuestionText(text) {
+  return escapeHtml(text).replace(/\r?\n/g, '<br>');
+}
+
+function sectionTitleByMarks(marks) {
+  if (marks <= 2) return 'Short Answer Questions';
+  if (marks <= 5) return 'Medium Answer Questions';
+  return 'Long Answer Questions';
+}
+
+function printPaper() {
+  const course = getCourse();
+  const displayTitle = getDisplayPaperTitle(course);
+  const showCourseLine = !!(course && course.name && displayTitle.toLowerCase() !== String(course.name).trim().toLowerCase());
+  const totalMarks = questions.reduce((s, q) => s + (q.marks || 0), 0);
+  const printDate = new Date(paper.created_at).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+
+  const groupedByMarks = {};
+  questions.forEach((q) => {
+    const marks = Number(q.marks) || 0;
+    if (!groupedByMarks[marks]) groupedByMarks[marks] = [];
+    groupedByMarks[marks].push(q);
+  });
+  const markBands = Object.keys(groupedByMarks).map(Number).sort((a, b) => a - b);
+
+  let questionNumber = 0;
+  const sectionHtml = markBands.map((marks, idx) => {
+    const sectionCode = String.fromCharCode(65 + idx);
+    const rows = groupedByMarks[marks] || [];
+    const title = sectionTitleByMarks(marks);
+    return `
+      <section class="paper-section">
+        <div class="section-head">
+          <div class="section-label">SECTION ${sectionCode}</div>
+          <div class="section-mark">${marks} Marks Each</div>
+        </div>
+        <div class="section-title">${title}</div>
+        <div class="section-note">Answer all questions in this section.</div>
+        <table class="question-table">
+          <tbody>
+            ${rows.map((q) => {
+              questionNumber += 1;
+              return `
+                <tr class="question-row">
+                  <td class="qno">${questionNumber}.</td>
+                  <td class="qtext">${formatQuestionText(q.text)}</td>
+                  <td class="qmarks">(${q.marks})</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </section>
+    `;
+  }).join('');
+
+  const w = window.open('', '_blank');
+  if (!w) {
+    showToast('Allow pop-ups to print or save PDF.', 'error');
+    return;
+  }
+
+  w.document.write(`<!DOCTYPE html>
+  <html>
+    <head>
+      <meta charset="utf-8">
+      <title>${escapeHtml(displayTitle)}</title>
+      <style>
+        @page { size: A4 portrait; margin: 18mm 16mm; }
+        * { box-sizing: border-box; }
+        body {
+          margin: 0;
+          color: #111;
+          font-family: "Times New Roman", Times, serif;
+          font-size: 12pt;
+          line-height: 1.45;
+        }
+        .paper-shell { max-width: 180mm; margin: 0 auto; }
+        .paper-header {
+          border: 1.5px solid #111;
+          padding: 10px 12px;
+          margin-bottom: 12px;
+        }
+        .org-name {
+          text-align: center;
+          font-weight: 700;
+          font-size: 14pt;
+          letter-spacing: 0.8px;
+          margin-bottom: 4px;
+        }
+        .paper-title {
+          text-align: center;
+          font-weight: 700;
+          font-size: 13pt;
+          margin-bottom: 2px;
+          text-transform: uppercase;
+        }
+        .course-name {
+          text-align: center;
+          font-size: 11.5pt;
+          margin-bottom: 8px;
+        }
+        .meta-table {
+          width: 100%;
+          border-collapse: collapse;
+          border: 1px solid #111;
+        }
+        .meta-table th, .meta-table td {
+          border: 1px solid #111;
+          padding: 5px 6px;
+          font-size: 10.5pt;
+          text-align: left;
+          vertical-align: top;
+        }
+        .meta-table th {
+          width: 18%;
+          font-weight: 700;
+          background: #f4f4f4;
+        }
+        .candidate-row {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          margin: 10px 0 6px;
+          font-size: 10.5pt;
+        }
+        .instructions {
+          border: 1px solid #111;
+          padding: 8px 10px;
+          margin-bottom: 12px;
+        }
+        .instructions-title {
+          font-weight: 700;
+          margin-bottom: 4px;
+          text-transform: uppercase;
+          font-size: 10.5pt;
+        }
+        .instructions ol {
+          margin: 0;
+          padding-left: 20px;
+          font-size: 10.5pt;
+        }
+        .instructions li { margin-bottom: 2px; }
+        .paper-section { margin: 14px 0 0; page-break-inside: avoid; }
+        .section-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
+          border-bottom: 1px solid #111;
+          padding-bottom: 3px;
+          margin-bottom: 5px;
+        }
+        .section-label {
+          font-weight: 700;
+          letter-spacing: 0.5px;
+        }
+        .section-mark {
+          font-weight: 700;
+          font-size: 10.5pt;
+        }
+        .section-title {
+          font-style: italic;
+          margin-bottom: 2px;
+          font-size: 10.5pt;
+        }
+        .section-note {
+          margin-bottom: 7px;
+          font-size: 10.5pt;
+        }
+        .question-table {
+          width: 100%;
+          border-collapse: collapse;
+          table-layout: fixed;
+        }
+        .question-row {
+          border-bottom: 1px solid #ddd;
+          page-break-inside: avoid;
+        }
+        .question-table td {
+          padding: 7px 3px;
+          vertical-align: top;
+        }
+        .qno {
+          width: 34px;
+          font-weight: 700;
+        }
+        .qtext {
+          width: auto;
+          text-align: justify;
+          padding-right: 8px;
+        }
+        .qmarks {
+          width: 52px;
+          text-align: right;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+        .empty-state {
+          border: 1px dashed #666;
+          padding: 12px;
+          text-align: center;
+          margin-top: 10px;
+        }
+        @media print {
+          body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .paper-shell { margin: 0; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="paper-shell">
+        <header class="paper-header">
+          <div class="org-name">UNIVERSITY EXAMINATION</div>
+          <div class="paper-title">${escapeHtml(displayTitle)}</div>
+          ${showCourseLine ? `<div class="course-name">${escapeHtml(course.name)}</div>` : ''}
+          <table class="meta-table">
+            <tr>
+              <th>Department</th>
+              <td>${escapeHtml(course?.department || 'N/A')}</td>
+              <th>Date</th>
+              <td>${escapeHtml(printDate)}</td>
+            </tr>
+            <tr>
+              <th>Semester</th>
+              <td>${escapeHtml(course?.semester || 'N/A')}</td>
+              <th>Duration</th>
+              <td>${escapeHtml(String(paper.duration_minutes || 0))} Minutes</td>
+            </tr>
+            <tr>
+              <th>Total Questions</th>
+              <td>${questions.length}</td>
+              <th>Maximum Marks</th>
+              <td>${totalMarks}</td>
+            </tr>
+          </table>
+          <div class="candidate-row">
+            <span>Register Number: ____________________</span>
+            <span>Answer Book Number: ____________________</span>
+          </div>
+        </header>
+
+        <section class="instructions">
+          <div class="instructions-title">Instructions</div>
+          <ol>
+            <li>Answer all questions in the provided answer booklet.</li>
+            <li>Marks for each question are indicated at the right margin.</li>
+            <li>Write the question number clearly for every answer.</li>
+          </ol>
+        </section>
+
+        ${sectionHtml || '<div class="empty-state">No questions are available for printing.</div>'}
+      </div>
+    </body>
+  </html>`);
+  w.document.close();
+  setTimeout(() => w.print(), 450);
+}
 function copyText() {
+  const displayTitle = getDisplayPaperTitle(getCourse());
   const totalMarks = questions.reduce((s,q) => s+(q.marks||0), 0);
-  let text = `${paper.title}\nTotal Marks: ${totalMarks} | Duration: ${paper.duration_minutes} min\n\n`;
+  let text = `${displayTitle}\nTotal Marks: ${totalMarks} | Duration: ${paper.duration_minutes} min\n\n`;
   questions.forEach((q,i) => {
     text += `Q${i+1}. ${q.text} [${q.marks} marks]\n`;
   });

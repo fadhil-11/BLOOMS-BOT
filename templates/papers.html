@@ -46,6 +46,22 @@ async function load() {
   render(d.papers || []);
 }
 
+function displayPaperTitle(paper, course) {
+  const rawTitle = String((paper && paper.title) || '').trim();
+  if (!rawTitle) return (course && course.name) || 'Untitled Paper';
+
+  const normalized = rawTitle.replace(/\s+/g, ' ');
+  const prefixPattern = /^generated paper\s*-\s*/i;
+  if (prefixPattern.test(normalized)) {
+    const cleaned = normalized.replace(prefixPattern, '').trim();
+    return cleaned || (course && course.name) || rawTitle;
+  }
+  if (/^generated paper$/i.test(normalized)) {
+    return (course && course.name) || rawTitle;
+  }
+  return rawTitle;
+}
+
 function render(papers) {
   const grid = document.getElementById('papers-grid');
   if (!papers.length) {
@@ -61,6 +77,7 @@ function render(papers) {
   grid.innerHTML = papers.map(p => {
     const course = courses.find(c => c.id === p.course_id);
     const date = new Date(p.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+    const displayTitle = displayPaperTitle(p, course);
     return `
       <div class="card" style="display:flex;align-items:center;gap:20px;padding:18px 24px;transition:border-color 0.15s;cursor:pointer"
         onclick="location.href='/review/${p.id}'"
@@ -68,7 +85,7 @@ function render(papers) {
         onmouseleave="this.style.borderColor='var(--border)'">
         <div style="width:44px;height:44px;background:var(--amber-glow);border:1px solid var(--amber-dim);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">📋</div>
         <div style="flex:1">
-          <div style="font-family:var(--font-serif);font-size:16px;font-style:italic;margin-bottom:4px">${p.title}</div>
+          <div style="font-family:var(--font-serif);font-size:16px;font-style:italic;margin-bottom:4px">${displayTitle}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             ${course ? `<span class="chip" style="font-size:10px">${course.name}</span>` : ''}
             <span class="chip" style="font-size:10px">📅 ${date}</span>

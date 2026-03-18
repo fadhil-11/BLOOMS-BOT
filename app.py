@@ -100,6 +100,12 @@ EMAIL_REGEX = re.compile(
     r"^(?=.{6,254}$)([A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?)@(?:[A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,63}$"
 )
 NAME_REGEX = re.compile(r"^[A-Za-z][A-Za-z .'-]{1,79}$")
+GENERATED_PAPER_PREFIX_REGEX = re.compile(r"^\s*generated\s+paper\s*[-:]\s*", re.IGNORECASE)
+GENERATED_PAPER_ONLY_REGEX = re.compile(r"^\s*generated\s+paper\s*$", re.IGNORECASE)
+REVISED_GENERATED_PAPER_REGEX = re.compile(
+    r"^\s*revised\s*[-:]\s*generated\s+paper\s*[-:]\s*(?P<title>.+?)\s*$",
+    re.IGNORECASE,
+)
 
 
 def _utcnow() -> datetime:
@@ -213,6 +219,23 @@ def _coerce_bool(value: Any) -> bool:
     if isinstance(value, (int, float)):
         return value != 0
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_paper_title(value: Any, fallback: str = "Question Paper") -> str:
+    fallback_text = str(fallback or "").strip() or "Question Paper"
+    title = str(value or "").strip()
+    if not title:
+        return fallback_text
+
+    revised_match = REVISED_GENERATED_PAPER_REGEX.fullmatch(title)
+    if revised_match:
+        cleaned = revised_match.group("title").strip()
+        return f"Revised - {cleaned}" if cleaned else "Revised"
+
+    title = GENERATED_PAPER_PREFIX_REGEX.sub("", title).strip()
+    if not title or GENERATED_PAPER_ONLY_REGEX.fullmatch(title):
+        return fallback_text
+    return title
 
 
 def _parse_json_field(value: Any, default: Any) -> Any:
@@ -712,11 +735,14 @@ def _config_to_dict(config: PaperConfig) -> Dict[str, Any]:
 
 
 def _paper_to_dict(paper: GeneratedPaper, include_questions: bool = True) -> Dict[str, Any]:
+    course_name = ""
+    if getattr(paper, "course", None) is not None:
+        course_name = (paper.course.name or "").strip()
     payload = {
         "id": paper.id,
         "course_id": paper.course_id,
         "config_id": paper.config_id,
-        "title": paper.title,
+        "title": _normalize_paper_title(paper.title, course_name or "Question Paper"),
         "total_marks": paper.total_marks,
         "duration_minutes": paper.duration_minutes,
         "created_at": paper.created_at.isoformat(),
@@ -1098,9 +1124,10 @@ def create_app() -> Flask:
                     "source_chunk_id": q.get("source_chunk_id"),
                 })
 
-            title = config_payload.get("name") if config_payload else None
-            if not title:
-                title = f"Generated Paper - {course.name}"
+            title = ""
+            if isinstance(config_payload, dict):
+                title = (config_payload.get("name") or "").strip()
+            title = _normalize_paper_title(title, (course.name or "").strip() or "Question Paper")
             duration = _safe_int(config_payload.get("duration_minutes"), DEFAULT_DURATION_MINUTES)
 
             generated = GeneratedPaper(
@@ -1430,7 +1457,13 @@ def create_app() -> Flask:
         if not isinstance(questions, list) or not questions:
             return jsonify({"error": "questions list is required"}), 400
 
-        title = (data.get("title") or f"Revised - {paper.title}").strip()
+        base_title = _normalize_paper_title(
+            paper.title,
+            (paper.course.name or "").strip() if getattr(paper, "course", None) else "Question Paper",
+        )
+        requested_title = (data.get("title") or "").strip()
+        title = requested_title or f"Revised - {base_title}"
+        title = _normalize_paper_title(title, f"Revised - {base_title}")
         revised = GeneratedPaper(
             course_id=paper.course_id,
             config_id=paper.config_id,
