@@ -3,8 +3,8 @@
 BLOOMS BOT - Main Flask Application
 
 Pipeline:
-1. PDF Upload
-2. PDF Text Extraction
+1. Syllabus Upload (PDF or screenshot)
+2. Syllabus Text Extraction
 3. Text Cleaning + Chunking (500-800 words)
 4. GPT Question Generation (NO Bloom)
 5. Question Validation (hard rejection)
@@ -26,7 +26,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from pdf_processor import extract_text_from_pdf
+from pdf_processor import extract_text_from_syllabus
 from text_chunker import chunk_text
 from gpt_question_gen import generate_questions_for_chunk
 from question_validator import (
@@ -362,8 +362,10 @@ def _resolve_batch_sizes(settings: Optional[Dict[str, Any]]) -> Tuple[int, int]:
 
 
 def _run_pipeline_core(
-    pdf_file,
+    syllabus_file,
     debug_mode: bool,
+    syllabus_filename: str = "",
+    syllabus_content_type: str = "",
     settings: Optional[Dict[str, Any]] = None,
     progress_cb: Optional[Callable[[str, int, Optional[Dict[str, Any]]], None]] = None,
     return_bank: bool = False,
@@ -376,11 +378,15 @@ def _run_pipeline_core(
 
     report("Extracting text", 10)
     try:
-        raw_text = extract_text_from_pdf(pdf_file)
+        raw_text = extract_text_from_syllabus(
+            syllabus_file,
+            filename=syllabus_filename,
+            content_type=syllabus_content_type,
+        )
     except ValueError as e:
         return {"error": str(e)}, 400, None
     except Exception as e:
-        return {"error": f"Failed to process PDF: {e}"}, 500, None
+        return {"error": f"Failed to process syllabus file: {e}"}, 500, None
 
     if not raw_text or not raw_text.strip():
         return {"error": "Extracted syllabus is empty; cannot generate questions."}, 400, None
@@ -395,6 +401,8 @@ def _run_pipeline_core(
 
     batch_size, retry_batch_size = _resolve_batch_sizes(settings)
     debug_report.update({
+        "syllabus_filename": syllabus_filename or None,
+        "syllabus_content_type": syllabus_content_type or None,
         "chunks_created": len(chunks),
         "chunk_word_counts": [_approx_word_count(chunk) for chunk in chunks][:10],
         "raw_text_chars": len(raw_text),
@@ -986,7 +994,9 @@ def create_app() -> Flask:
 
     def run_pipeline_job(
         job_id: str,
-        pdf_bytes: Optional[bytes],
+        syllabus_bytes: Optional[bytes],
+        syllabus_filename: Optional[str],
+        syllabus_content_type: Optional[str],
         course_id: int,
         config_id: Optional[int],
         inline_config: Optional[Dict[str, Any]],
@@ -1000,10 +1010,12 @@ def create_app() -> Flask:
             if not course:
                 raise RuntimeError("Course not found")
 
-            if pdf_bytes is None:
+            if syllabus_bytes is None:
                 if not course.syllabus_pdf:
                     raise RuntimeError("No syllabus stored for this course")
-                pdf_bytes = course.syllabus_pdf
+                syllabus_bytes = course.syllabus_pdf
+                syllabus_filename = course.syllabus_filename or "syllabus.pdf"
+                syllabus_content_type = ""
 
             if config_id:
                 config = PaperConfig.query.get(config_id)
@@ -1019,7 +1031,9 @@ def create_app() -> Flask:
             settings_payload = _build_settings_from_config(config_payload, settings_row)
 
             result, status_code, bank_payload = _run_pipeline_core(
-                BytesIO(pdf_bytes),
+                BytesIO(syllabus_bytes),
+                syllabus_filename=syllabus_filename or "",
+                syllabus_content_type=syllabus_content_type or "",
                 debug_mode=True,
                 settings=settings_payload,
                 progress_cb=report,
@@ -1029,9 +1043,9 @@ def create_app() -> Flask:
             if status_code != 200:
                 raise RuntimeError(result.get("error", "Pipeline failed"))
 
-            if pdf_bytes is not None:
-                course.syllabus_pdf = pdf_bytes
-                course.syllabus_filename = course.syllabus_filename or "syllabus.pdf"
+            if syllabus_bytes is not None:
+                course.syllabus_pdf = syllabus_bytes
+                course.syllabus_filename = (syllabus_filename or "").strip() or "syllabus.pdf"
 
             question_records: List[Question] = []
             for item in bank_payload or []:
@@ -1135,17 +1149,23 @@ def create_app() -> Flask:
             course_id = _safe_int(payload.get("course_id"), 0)
             config_id = _safe_int(payload.get("config_id"), 0) or None
             inline_config = payload.get("config") if isinstance(payload.get("config"), dict) else None
-            pdf_bytes = None
+            syllabus_bytes = None
+            syllabus_filename = None
+            syllabus_content_type = None
         else:
             payload = request.form.to_dict()
             course_id = _safe_int(payload.get("course_id"), 0)
             config_id = _safe_int(payload.get("config_id"), 0) or None
             inline_config = _parse_json_field(payload.get("config"), None)
-            pdf_file = request.files.get("syllabus_pdf")
-            if pdf_file and pdf_file.filename:
-                pdf_bytes = pdf_file.read()
+            uploaded_file = request.files.get("syllabus_file") or request.files.get("syllabus_pdf")
+            if uploaded_file and uploaded_file.filename:
+                syllabus_bytes = uploaded_file.read()
+                syllabus_filename = uploaded_file.filename
+                syllabus_content_type = uploaded_file.content_type
             else:
-                pdf_bytes = None
+                syllabus_bytes = None
+                syllabus_filename = None
+                syllabus_content_type = None
 
         if course_id <= 0:
             return jsonify({"error": "course_id is required"}), 400
@@ -1154,7 +1174,17 @@ def create_app() -> Flask:
             inline_config = {}
 
         job = create_job()
-        run_in_thread(job.id, run_pipeline_job, job.id, pdf_bytes, course_id, config_id, inline_config)
+        run_in_thread(
+            job.id,
+            run_pipeline_job,
+            job.id,
+            syllabus_bytes,
+            syllabus_filename,
+            syllabus_content_type,
+            course_id,
+            config_id,
+            inline_config,
+        )
         return jsonify({"job_id": job.id, "status": "queued"}), 202
 
     @app.route("/api/courses", methods=["GET", "POST"])

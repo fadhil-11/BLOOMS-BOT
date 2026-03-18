@@ -296,13 +296,13 @@ async function initUploadPage() {
       return;
     }
     if (!file) {
-      showToast("Upload a syllabus PDF");
+      showToast("Upload a syllabus file (PDF or screenshot)");
       return;
     }
     const formData = new FormData();
     formData.append("course_id", courseId);
     if (configId) formData.append("config_id", configId);
-    formData.append("syllabus_pdf", file);
+    formData.append("syllabus_file", file);
 
     try {
       statusEl.textContent = "Queued";
