@@ -16,12 +16,15 @@ Pipeline:
 
 import json
 import os
+import re
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from flask import Flask, abort, jsonify, render_template, request
+from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import IntegrityError
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from pdf_processor import extract_text_from_pdf
 from text_chunker import chunk_text
@@ -93,10 +96,22 @@ DEFAULT_MARK_DISTRIBUTION = [
 ]
 
 DEFAULT_DURATION_MINUTES = 90
+EMAIL_REGEX = re.compile(
+    r"^(?=.{6,254}$)([A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?)@(?:[A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,63}$"
+)
+NAME_REGEX = re.compile(r"^[A-Za-z][A-Za-z .'-]{1,79}$")
 
 
 def _utcnow() -> datetime:
     return datetime.utcnow()
+
+
+class AuthUser(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    full_name = db.Column(db.String(80), nullable=False)
+    email = db.Column(db.String(254), nullable=False, unique=True, index=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=_utcnow)
 
 
 class Course(db.Model):
@@ -211,6 +226,69 @@ def _parse_json_field(value: Any, default: Any) -> Any:
         except json.JSONDecodeError:
             return default
     return default
+
+
+def _normalize_email(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _is_valid_email(email: str) -> bool:
+    return bool(EMAIL_REGEX.fullmatch(email or ""))
+
+
+def _validate_password(password: str) -> Optional[str]:
+    if len(password) < 8:
+        return "Password must be at least 8 characters long."
+    if len(password) > 64:
+        return "Password must be at most 64 characters long."
+    if not re.search(r"[A-Z]", password):
+        return "Password must include at least one uppercase letter."
+    if not re.search(r"[a-z]", password):
+        return "Password must include at least one lowercase letter."
+    if not re.search(r"\d", password):
+        return "Password must include at least one number."
+    if not re.search(r"[^A-Za-z0-9]", password):
+        return "Password must include at least one special character."
+    if re.search(r"\s", password):
+        return "Password cannot contain spaces."
+    return None
+
+
+def _is_safe_next_path(path: str) -> bool:
+    if not path:
+        return False
+    if not path.startswith("/"):
+        return False
+    return not path.startswith("//")
+
+
+def _resolve_next_path(default_endpoint: str) -> str:
+    next_path = (request.form.get("next") or request.args.get("next") or "").strip()
+    if _is_safe_next_path(next_path):
+        return next_path
+    return url_for(default_endpoint)
+
+
+def _login_as_user(user: AuthUser) -> None:
+    session.clear()
+    session["auth_user_id"] = user.id
+    session["auth_user_name"] = user.full_name
+    session["auth_user_email"] = user.email
+    session["auth_is_admin"] = False
+
+
+def _login_as_admin() -> None:
+    session.clear()
+    session["auth_user_id"] = 0
+    session["auth_user_name"] = "Administrator"
+    session["auth_user_email"] = "admin"
+    session["auth_is_admin"] = True
+
+
+def _is_authenticated() -> bool:
+    if session.get("auth_is_admin"):
+        return True
+    return bool(session.get("auth_user_id"))
 
 
 def _difficulty_from_marks(marks: int) -> str:
@@ -687,6 +765,7 @@ def create_app() -> Flask:
     app = Flask(__name__)
 
     db_path = os.path.join(app.root_path, "blooms.db")
+    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "change-this-in-production")
     app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path}"
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     db.init_app(app)
@@ -706,6 +785,25 @@ def create_app() -> Flask:
         init_db()
         return jsonify({"status": "ok"})
 
+    @app.before_request
+    def require_authentication():
+        path = request.path or "/"
+        if path in {"/", "/landing", "/login", "/signup", "/logout", "/favicon.ico"}:
+            return None
+        if path.startswith("/static/"):
+            return None
+        if path.startswith("/admin/init-db"):
+            return None
+        if _is_authenticated():
+            return None
+        if path.startswith("/api/"):
+            return jsonify({"error": "Authentication required. Please sign in."}), 401
+        next_path = path
+        if request.query_string:
+            next_query = request.query_string.decode("utf-8", errors="ignore")
+            next_path = f"{path}?{next_query}"
+        return redirect(url_for("login", next=next_path))
+
     @app.route("/")
     def root():
         return render_template("landing.html", page="landing", title="Blooms Bot")
@@ -714,13 +812,149 @@ def create_app() -> Flask:
     def landing():
         return render_template("landing.html", page="landing", title="Blooms Bot")
 
-    @app.route("/login")
+    @app.route("/login", methods=["GET", "POST"])
     def login():
-        return render_template("login.html", page="login", title="Sign In")
+        if request.method == "GET":
+            if _is_authenticated():
+                return redirect(_resolve_next_path("upload"))
+            info_message = None
+            if request.args.get("msg") == "signed_out":
+                info_message = "You have been signed out."
+            return render_template(
+                "login.html",
+                page="login",
+                title="Sign In",
+                error_message=None,
+                info_message=info_message,
+                signup_prompt=False,
+                email_value="",
+                next_value=(request.args.get("next") or "").strip(),
+            )
 
-    @app.route("/signup")
+        identifier = (request.form.get("email") or "").strip()
+        password = request.form.get("password") or ""
+        next_value = (request.form.get("next") or "").strip()
+
+        if identifier == "admin" and password == "123":
+            _login_as_admin()
+            return redirect(_resolve_next_path("upload"))
+
+        normalized_email = _normalize_email(identifier)
+        if not _is_valid_email(normalized_email):
+            return render_template(
+                "login.html",
+                page="login",
+                title="Sign In",
+                error_message="Enter a valid email address. For testing, use admin / 123.",
+                info_message=None,
+                signup_prompt=False,
+                email_value=identifier,
+                next_value=next_value,
+            )
+
+        user = AuthUser.query.filter_by(email=normalized_email).first()
+        if not user:
+            return render_template(
+                "login.html",
+                page="login",
+                title="Sign In",
+                error_message="No account found for this email. Please sign up first.",
+                info_message=None,
+                signup_prompt=True,
+                email_value=identifier,
+                next_value=next_value,
+            )
+
+        if not check_password_hash(user.password_hash, password):
+            return render_template(
+                "login.html",
+                page="login",
+                title="Sign In",
+                error_message="Incorrect password. Please try again.",
+                info_message=None,
+                signup_prompt=False,
+                email_value=identifier,
+                next_value=next_value,
+            )
+
+        _login_as_user(user)
+        return redirect(_resolve_next_path("upload"))
+
+    @app.route("/signup", methods=["GET", "POST"])
     def signup():
-        return render_template("signup.html", page="signup", title="Sign Up")
+        if request.method == "GET":
+            if _is_authenticated():
+                return redirect(_resolve_next_path("upload"))
+            return render_template(
+                "signup.html",
+                page="signup",
+                title="Sign Up",
+                error_message=None,
+                full_name_value="",
+                email_value="",
+                next_value=(request.args.get("next") or "").strip(),
+            )
+
+        full_name = (request.form.get("full_name") or "").strip()
+        email_raw = (request.form.get("email") or "").strip()
+        email_normalized = _normalize_email(email_raw)
+        password = request.form.get("password") or ""
+        confirm_password = request.form.get("confirm_password") or ""
+        next_value = (request.form.get("next") or "").strip()
+
+        error_message: Optional[str] = None
+        if not NAME_REGEX.fullmatch(full_name):
+            error_message = "Enter a valid full name (letters, spaces, apostrophes, periods, hyphens)."
+        elif not _is_valid_email(email_normalized):
+            error_message = "Enter a valid email address."
+        elif password != confirm_password:
+            error_message = "Password and confirm password do not match."
+        else:
+            password_error = _validate_password(password)
+            if password_error:
+                error_message = password_error
+
+        if not error_message and AuthUser.query.filter_by(email=email_normalized).first():
+            error_message = "An account with this email already exists. Please sign in."
+
+        if error_message:
+            return render_template(
+                "signup.html",
+                page="signup",
+                title="Sign Up",
+                error_message=error_message,
+                full_name_value=full_name,
+                email_value=email_raw,
+                next_value=next_value,
+            )
+
+        user = AuthUser(
+            full_name=full_name,
+            email=email_normalized,
+            password_hash=generate_password_hash(password),
+        )
+        db.session.add(user)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return render_template(
+                "signup.html",
+                page="signup",
+                title="Sign Up",
+                error_message="An account with this email already exists. Please sign in.",
+                full_name_value=full_name,
+                email_value=email_raw,
+                next_value=next_value,
+            )
+
+        _login_as_user(user)
+        return redirect(_resolve_next_path("upload"))
+
+    @app.route("/logout", methods=["GET"])
+    def logout():
+        session.clear()
+        return redirect(url_for("login", msg="signed_out"))
 
     @app.route("/upload")
     def upload():

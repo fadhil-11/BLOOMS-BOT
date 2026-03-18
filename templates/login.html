@@ -182,6 +182,37 @@
       color: var(--text-3);
     }
 
+    .alert {
+      border-radius: var(--radius);
+      border: 1px solid;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.45;
+      margin-bottom: 14px;
+    }
+
+    .alert.error {
+      background: rgba(240, 84, 84, 0.1);
+      border-color: rgba(240, 84, 84, 0.5);
+      color: #ffb8b8;
+    }
+
+    .alert.info {
+      background: rgba(66, 153, 225, 0.1);
+      border-color: rgba(66, 153, 225, 0.45);
+      color: #b7dcff;
+    }
+
+    .alert a {
+      color: var(--amber);
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .alert a:hover {
+      text-decoration: underline;
+    }
+
     .form-group {
       margin-bottom: 16px;
     }
@@ -349,15 +380,35 @@
       <h2 class="login-form-title">Welcome back</h2>
       <p class="login-form-sub">Sign in to continue to your workspace</p>
 
-      <form id="login-form" novalidate>
+      {% if error_message %}
+      <div class="alert error">
+        {{ error_message }}
+        {% if signup_prompt %}
+        <div><a href="/signup">Create an account</a></div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if info_message %}
+      <div class="alert info">{{ info_message }}</div>
+      {% endif %}
+
+      <form id="login-form" method="post" action="/login" novalidate>
+        <input type="hidden" name="next" value="{{ next_value or '' }}" />
+
         <div class="form-group">
           <label class="form-label" for="login-email">Email Address</label>
           <input
             id="login-email"
-            type="email"
+            type="text"
+            name="email"
             class="form-input"
-            placeholder="faculty@university.edu"
-            autocomplete="email"
+            placeholder="faculty@university.edu or admin"
+            autocomplete="username"
+            value="{{ email_value or '' }}"
+            required
+            pattern="^(admin|[^@\s]+@[^@\s]+\.[^@\s]+)$"
+            title="Enter a valid email address, or admin for testing."
           />
         </div>
 
@@ -366,9 +417,11 @@
           <input
             id="login-password"
             type="password"
+            name="password"
             class="form-input"
             placeholder="Enter your password"
             autocomplete="current-password"
+            required
           />
         </div>
 
@@ -416,11 +469,6 @@
           event.preventDefault();
           loginForm.requestSubmit();
         }
-      });
-
-      loginForm.addEventListener("submit", (event) => {
-        event.preventDefault();
-        window.location.href = "/upload";
       });
     })();
   </script>

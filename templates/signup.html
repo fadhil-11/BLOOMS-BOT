@@ -5,38 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sign Up - Blooms Bot</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg:#0d0f14; --bg-1:#13161e; --bg-2:#191d28;
-      --border:#252b3b; --border-2:#2e3650;
-      --text:#e8eaf0; --text-2:#a0a8c0;
-      --amber:#f5a623; --amber-glow:#f5a62322;
-      --font-serif:'Libre Baskerville',Georgia,serif;
-      --font-sans:'Outfit',sans-serif;
-      --font-mono:'DM Mono',monospace;
-      --radius:6px;
+      --bg: #0d0f14;
+      --bg-1: #13161e;
+      --bg-2: #191d28;
+      --border: #252b3b;
+      --border-2: #2e3650;
+      --text: #e8eaf0;
+      --text-2: #a0a8c0;
+      --amber: #f5a623;
+      --amber-glow: rgba(245, 166, 35, 0.14);
+      --font-serif: "Libre Baskerville", Georgia, serif;
+      --font-sans: "Outfit", sans-serif;
+      --font-mono: "DM Mono", monospace;
+      --radius: 7px;
     }
 
-    *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
-      min-height:100vh;
+      min-height: 100vh;
       background: var(--bg);
       color: var(--text);
       font-family: var(--font-sans);
-      display:grid;
-      place-items:center;
-      padding:24px;
+      display: grid;
+      place-items: center;
+      padding: 24px;
     }
 
     .card {
-      width:min(480px, 100%);
+      width: min(500px, 100%);
       background: var(--bg-1);
-      border:1px solid var(--border);
-      border-radius:10px;
-      padding:28px;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 28px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
     }
 
     .brand {
@@ -46,7 +58,9 @@
       margin-bottom: 16px;
     }
 
-    .brand span { color: var(--amber); }
+    .brand span {
+      color: var(--amber);
+    }
 
     .title {
       font-size: 24px;
@@ -58,30 +72,43 @@
     .subtitle {
       color: var(--text-2);
       font-size: 13px;
-      margin-bottom: 24px;
+      margin-bottom: 18px;
     }
 
-    .form-group { margin-bottom: 14px; }
+    .alert {
+      border-radius: var(--radius);
+      border: 1px solid rgba(240, 84, 84, 0.5);
+      background: rgba(240, 84, 84, 0.1);
+      color: #ffb8b8;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.45;
+      margin-bottom: 14px;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
 
     .form-label {
-      display:block;
-      font-size:10px;
+      display: block;
+      font-size: 10px;
       font-family: var(--font-mono);
-      letter-spacing:1.4px;
-      text-transform:uppercase;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
       color: var(--text-2);
-      margin-bottom:8px;
+      margin-bottom: 8px;
     }
 
     .form-input {
-      width:100%;
+      width: 100%;
       background: var(--bg-2);
-      border:1px solid var(--border-2);
+      border: 1px solid var(--border-2);
       border-radius: var(--radius);
       color: var(--text);
-      padding:12px 14px;
-      font-size:14px;
-      outline:none;
+      padding: 12px 14px;
+      font-size: 14px;
+      outline: none;
     }
 
     .form-input:focus {
@@ -89,27 +116,38 @@
       box-shadow: 0 0 0 3px var(--amber-glow);
     }
 
+    .hint {
+      font-size: 11px;
+      color: var(--text-2);
+      margin-top: -4px;
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+
     .btn {
-      width:100%;
-      border:none;
+      width: 100%;
+      border: none;
       border-radius: var(--radius);
-      padding:12px;
-      font-size:14px;
-      font-weight:600;
-      cursor:pointer;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
       transition: all 0.15s;
-      margin-top:10px;
+      margin-top: 10px;
     }
 
     .btn-primary {
       background: var(--amber);
-      color:#0d0f14;
+      color: #0d0f14;
     }
 
     .btn-secondary {
       background: transparent;
       color: var(--amber);
-      border:1px solid var(--amber);
+      border: 1px solid var(--amber);
+      text-decoration: none;
+      display: inline-block;
+      text-align: center;
     }
 
     .btn:hover {
@@ -122,26 +160,88 @@
   <div class="card">
     <div class="brand"><span>Blooms</span> Bot</div>
     <h1 class="title">Create account</h1>
-    <p class="subtitle">Sign up to start generating Bloom-aligned papers.</p>
+    <p class="subtitle">Sign up to start generating Bloom aligned papers.</p>
 
-    <div class="form-group">
-      <label class="form-label">Full name</label>
-      <input class="form-input" type="text" placeholder="Faculty Member" />
-    </div>
+    {% if error_message %}
+    <div class="alert">{{ error_message }}</div>
+    {% endif %}
 
-    <div class="form-group">
-      <label class="form-label">Email address</label>
-      <input class="form-input" type="email" placeholder="faculty@university.edu" />
-    </div>
+    <form method="post" action="/signup" novalidate>
+      <input type="hidden" name="next" value="{{ next_value or '' }}" />
 
-    <div class="form-group">
-      <label class="form-label">Password</label>
-      <input class="form-input" type="password" placeholder="Enter password" />
-    </div>
+      <div class="form-group">
+        <label class="form-label" for="signup-full-name">Full Name</label>
+        <input
+          id="signup-full-name"
+          class="form-input"
+          name="full_name"
+          type="text"
+          placeholder="Faculty Member"
+          value="{{ full_name_value or '' }}"
+          minlength="2"
+          maxlength="80"
+          pattern="^[A-Za-z][A-Za-z .'-]{1,79}$"
+          title="Use letters, spaces, apostrophes, periods, and hyphens only."
+          autocomplete="name"
+          required
+        />
+      </div>
 
-    <button class="btn btn-primary" onclick="location.href='/upload'">Sign Up -></button>
-    <button class="btn btn-secondary" onclick="location.href='/login'">Already have an account? Sign In</button>
-    <button class="btn btn-secondary" onclick="location.href='/'">Back to Landing</button>
+      <div class="form-group">
+        <label class="form-label" for="signup-email">Email Address</label>
+        <input
+          id="signup-email"
+          class="form-input"
+          name="email"
+          type="email"
+          placeholder="faculty@university.edu"
+          value="{{ email_value or '' }}"
+          maxlength="254"
+          pattern="^[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@(?:[A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,63}$"
+          title="Enter a valid email address."
+          autocomplete="email"
+          inputmode="email"
+          required
+        />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="signup-password">Password</label>
+        <input
+          id="signup-password"
+          class="form-input"
+          name="password"
+          type="password"
+          placeholder="Create a strong password"
+          minlength="8"
+          maxlength="64"
+          pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,64}"
+          title="8-64 chars with uppercase, lowercase, number, and special character."
+          autocomplete="new-password"
+          required
+        />
+      </div>
+
+      <p class="hint">Password rule: 8-64 characters, including uppercase, lowercase, number, and special character.</p>
+
+      <div class="form-group">
+        <label class="form-label" for="signup-confirm-password">Confirm Password</label>
+        <input
+          id="signup-confirm-password"
+          class="form-input"
+          name="confirm_password"
+          type="password"
+          placeholder="Re-enter password"
+          autocomplete="new-password"
+          required
+        />
+      </div>
+
+      <button class="btn btn-primary" type="submit">Sign Up -></button>
+    </form>
+
+    <a class="btn btn-secondary" href="/login">Already have an account? Sign In</a>
+    <a class="btn btn-secondary" href="/">Back to Landing</a>
   </div>
 </body>
 </html>
