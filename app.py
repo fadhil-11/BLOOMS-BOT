@@ -21,7 +21,7 @@ from datetime import datetime
 from io import BytesIO
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, session, url_for
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -750,6 +750,124 @@ def _paper_to_dict(paper: GeneratedPaper, include_questions: bool = True) -> Dic
     if include_questions:
         payload["questions"] = paper.questions
     return payload
+
+
+def _section_title_by_marks(marks: int) -> str:
+    if marks <= 2:
+        return "Short Answer Questions"
+    if marks <= 5:
+        return "Medium Answer Questions"
+    return "Long Answer Questions"
+
+
+def _safe_filename_stem(value: Any, fallback: str = "question_paper") -> str:
+    raw = re.sub(r"\s+", " ", str(value or "").strip())
+    if not raw:
+        raw = fallback
+    safe = re.sub(r"[^A-Za-z0-9._ -]", "", raw)
+    safe = re.sub(r"\s+", "_", safe).strip("._-")
+    return safe or fallback
+
+
+def _build_docx_export_stream(paper: GeneratedPaper) -> BytesIO:
+    try:
+        from docx import Document
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.shared import Pt
+    except ImportError as exc:
+        raise RuntimeError("DOCX export requires python-docx.") from exc
+
+    course = paper.course if getattr(paper, "course", None) is not None else None
+    course_name = (course.name or "").strip() if course is not None else ""
+    display_title = _normalize_paper_title(paper.title, course_name or "Question Paper")
+    show_course_line = bool(course_name and display_title.lower() != course_name.lower())
+
+    raw_questions = paper.questions if isinstance(paper.questions, list) else []
+    questions = [q for q in raw_questions if isinstance(q, dict)]
+    total_marks = sum(_safe_int(q.get("marks"), 0) for q in questions)
+    duration_minutes = _safe_int(paper.duration_minutes, 0)
+    created_date = paper.created_at.strftime("%d %b %Y") if paper.created_at else ""
+
+    doc = Document()
+    normal_style = doc.styles["Normal"]
+    normal_style.font.name = "Times New Roman"
+    normal_style.font.size = Pt(12)
+
+    heading = doc.add_paragraph("UNIVERSITY EXAMINATION")
+    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    if heading.runs:
+        heading.runs[0].bold = True
+
+    title_paragraph = doc.add_paragraph(display_title.upper())
+    title_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    if title_paragraph.runs:
+        title_paragraph.runs[0].bold = True
+
+    if show_course_line:
+        course_paragraph = doc.add_paragraph(course_name)
+        course_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    doc.add_paragraph("")
+
+    metadata_rows = [
+        ("Department", (course.department or "").strip() if course and course.department else "N/A", "Date", created_date or "N/A"),
+        ("Semester", (course.semester or "").strip() if course and course.semester else "N/A", "Duration", f"{duration_minutes} Minutes"),
+        ("Total Questions", str(len(questions)), "Maximum Marks", str(total_marks)),
+    ]
+    metadata_table = doc.add_table(rows=len(metadata_rows), cols=4)
+    try:
+        metadata_table.style = "Table Grid"
+    except Exception:
+        pass
+    for row_idx, row_values in enumerate(metadata_rows):
+        for col_idx, value in enumerate(row_values):
+            cell = metadata_table.rows[row_idx].cells[col_idx]
+            cell.text = str(value)
+            if col_idx in (0, 2):
+                paragraph = cell.paragraphs[0] if cell.paragraphs else None
+                run = paragraph.runs[0] if paragraph and paragraph.runs else None
+                if run is not None:
+                    run.bold = True
+
+    doc.add_paragraph("")
+    instructions_heading = doc.add_paragraph("Instructions")
+    if instructions_heading.runs:
+        instructions_heading.runs[0].bold = True
+    doc.add_paragraph("1. Answer all questions in the provided answer booklet.")
+    doc.add_paragraph("2. Marks for each question are indicated at the right margin.")
+    doc.add_paragraph("3. Write the question number clearly for every answer.")
+
+    grouped_by_marks: Dict[int, List[Dict[str, Any]]] = {}
+    for question in questions:
+        marks = _safe_int(question.get("marks"), 0)
+        grouped_by_marks.setdefault(marks, []).append(question)
+
+    mark_bands = sorted(grouped_by_marks.keys())
+    question_number = 0
+    for idx, marks in enumerate(mark_bands):
+        section_code = chr(65 + idx)
+        rows = grouped_by_marks.get(marks, [])
+        doc.add_paragraph("")
+        section_heading = doc.add_paragraph(f"SECTION {section_code} - {marks} Marks Each")
+        if section_heading.runs:
+            section_heading.runs[0].bold = True
+        doc.add_paragraph(_section_title_by_marks(marks))
+        doc.add_paragraph("Answer all questions in this section.")
+
+        for question in rows:
+            question_number += 1
+            question_text = str(question.get("text") or "").strip()
+            line = f"{question_number}. {question_text} ({marks})" if question_text else f"{question_number}. ({marks})"
+            doc.add_paragraph(line)
+
+    if not questions:
+        doc.add_paragraph("")
+        doc.add_paragraph("No questions are available for export.")
+
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
 
 
 def _get_or_create_settings() -> Settings:
@@ -1484,6 +1602,26 @@ def create_app() -> Flask:
     def api_export_pdf(paper_id: int):
         _ = GeneratedPaper.query.get_or_404(paper_id)
         return jsonify({"error": "PDF export not implemented yet"}), 501
+
+    @app.route("/api/papers/<int:paper_id>/export/docx", methods=["GET"])
+    def api_export_docx(paper_id: int):
+        paper = GeneratedPaper.query.get_or_404(paper_id)
+        try:
+            payload = _build_docx_export_stream(paper)
+        except RuntimeError as exc:
+            return jsonify({"error": str(exc)}), 500
+        except Exception as exc:
+            return jsonify({"error": f"DOCX export failed: {exc}"}), 500
+
+        course_name = (paper.course.name or "").strip() if getattr(paper, "course", None) else "Question Paper"
+        display_title = _normalize_paper_title(paper.title, course_name)
+        filename = f"{_safe_filename_stem(display_title)}.docx"
+        return send_file(
+            payload,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
 
     @app.route("/api/settings", methods=["GET", "PUT"])
     def api_settings():
