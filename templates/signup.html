@@ -9,15 +9,16 @@
   <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0d0f14;
-      --bg-1: #13161e;
-      --bg-2: #191d28;
-      --border: #252b3b;
-      --border-2: #2e3650;
-      --text: #e8eaf0;
-      --text-2: #a0a8c0;
-      --amber: #f5a623;
-      --amber-glow: rgba(245, 166, 35, 0.14);
+      --bg: #f6f8ff;
+      --bg-1: #ffffff;
+      --bg-2: #f1f4ff;
+      --border: #d8def0;
+      --border-2: #c6d0e8;
+      --text: #141b2d;
+      --text-2: #2f3b52;
+      --amber: #b95d3f;
+      --violet: #7368e2;
+      --amber-glow: rgba(123, 144, 255, 0.2);
       --font-serif: "Libre Baskerville", Georgia, serif;
       --font-sans: "Outfit", sans-serif;
       --font-mono: "DM Mono", monospace;
@@ -34,7 +35,11 @@
 
     body {
       min-height: 100vh;
-      background: var(--bg);
+      background:
+        radial-gradient(1100px 640px at -10% -18%, rgba(117, 150, 255, 0.24), transparent 58%),
+        radial-gradient(900px 560px at 112% -8%, rgba(170, 142, 255, 0.2), transparent 54%),
+        radial-gradient(860px 560px at 50% 118%, rgba(255, 190, 152, 0.2), transparent 58%),
+        linear-gradient(180deg, #fbfcff, #f3f6ff);
       color: var(--text);
       font-family: var(--font-sans);
       display: grid;
@@ -44,11 +49,12 @@
 
     .card {
       width: min(500px, 100%);
-      background: var(--bg-1);
+      background: linear-gradient(165deg, rgba(255, 255, 255, 0.96), rgba(247, 250, 255, 0.95));
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 28px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+      box-shadow: 0 22px 44px rgba(58, 77, 118, 0.16);
+      backdrop-filter: blur(8px);
     }
 
     .brand {
@@ -59,7 +65,7 @@
     }
 
     .brand span {
-      color: var(--amber);
+      color: var(--violet);
     }
 
     .title {
@@ -77,9 +83,9 @@
 
     .alert {
       border-radius: var(--radius);
-      border: 1px solid rgba(240, 84, 84, 0.5);
-      background: rgba(240, 84, 84, 0.1);
-      color: #ffb8b8;
+      border: 1px solid #eeb3c1;
+      background: #fce9ed;
+      color: #c94e63;
       padding: 10px 12px;
       font-size: 12px;
       line-height: 1.45;
@@ -102,7 +108,7 @@
 
     .form-input {
       width: 100%;
-      background: var(--bg-2);
+      background: rgba(255, 255, 255, 0.92);
       border: 1px solid var(--border-2);
       border-radius: var(--radius);
       color: var(--text);
@@ -112,7 +118,7 @@
     }
 
     .form-input:focus {
-      border-color: var(--amber);
+      border-color: #7b90ff;
       box-shadow: 0 0 0 3px var(--amber-glow);
     }
 
@@ -137,14 +143,14 @@
     }
 
     .btn-primary {
-      background: var(--amber);
-      color: #0d0f14;
+      background: linear-gradient(130deg, #7b90ff, #b188ff 58%, #f2a684);
+      color: #182034;
     }
 
     .btn-secondary {
-      background: transparent;
-      color: var(--amber);
-      border: 1px solid var(--amber);
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--violet);
+      border: 1px solid rgba(115, 104, 226, 0.3);
       text-decoration: none;
       display: inline-block;
       text-align: center;
@@ -152,7 +158,7 @@
 
     .btn:hover {
       transform: translateY(-1px);
-      box-shadow: 0 6px 20px var(--amber-glow);
+      box-shadow: 0 12px 26px rgba(95, 112, 174, 0.3);
     }
   </style>
 </head>

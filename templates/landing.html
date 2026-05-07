@@ -9,20 +9,21 @@
   <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg0: #0b1020;
-      --bg1: #0f1630;
-      --bg2: #151d35;
-      --card: rgba(22, 30, 52, 0.72);
-      --stroke: rgba(255, 255, 255, 0.1);
-      --stroke-soft: rgba(255, 255, 255, 0.06);
-      --text: #f2f5ff;
-      --text-2: #d8deef;
-      --text-3: #a6b1c9;
-      --amber: #f5a623;
-      --amber-soft: rgba(245, 166, 35, 0.12);
-      --amber-glow: rgba(245, 166, 35, 0.18);
-      --shadow-lg: 0 26px 58px rgba(2, 8, 23, 0.44);
-      --shadow-sm: 0 12px 26px rgba(2, 8, 23, 0.32);
+      --bg0: #f8faff;
+      --bg1: #f2f6ff;
+      --bg2: #eaf0ff;
+      --card: rgba(255, 255, 255, 0.84);
+      --stroke: rgba(104, 122, 168, 0.3);
+      --stroke-soft: rgba(104, 122, 168, 0.2);
+      --text: #141b2d;
+      --text-2: #2f3b52;
+      --text-3: #5f6a84;
+      --amber: #b95d3f;
+      --amber-soft: rgba(222, 124, 88, 0.14);
+      --amber-glow: rgba(222, 124, 88, 0.24);
+      --violet: #7368e2;
+      --shadow-lg: 0 26px 56px rgba(58, 77, 118, 0.18);
+      --shadow-sm: 0 12px 24px rgba(58, 77, 118, 0.12);
       --radius: 14px;
       --radius-lg: 18px;
       --transition: 180ms ease;
@@ -44,9 +45,10 @@
       font-family: "Outfit", system-ui, sans-serif;
       color: var(--text);
       background:
-        radial-gradient(1100px 560px at 18% -12%, rgba(245, 166, 35, 0.09), transparent 60%),
-        radial-gradient(920px 620px at 112% 8%, rgba(245, 166, 35, 0.07), transparent 56%),
-        linear-gradient(180deg, var(--bg1), var(--bg0));
+        radial-gradient(1100px 620px at 16% -12%, rgba(117, 150, 255, 0.24), transparent 60%),
+        radial-gradient(960px 620px at 112% 8%, rgba(170, 142, 255, 0.2), transparent 56%),
+        radial-gradient(980px 620px at 50% 118%, rgba(255, 190, 152, 0.2), transparent 58%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
     }
 
     .bg-ambient {
@@ -70,13 +72,13 @@
     }
 
     .bg-ambient::before {
-      background: radial-gradient(circle, rgba(245, 166, 35, 0.4), transparent 66%);
+      background: radial-gradient(circle, rgba(117, 150, 255, 0.42), transparent 66%);
       top: -180px;
       left: -100px;
     }
 
     .bg-ambient::after {
-      background: radial-gradient(circle, rgba(245, 166, 35, 0.28), transparent 66%);
+      background: radial-gradient(circle, rgba(222, 124, 88, 0.3), transparent 66%);
       right: -130px;
       bottom: -220px;
       animation-delay: -5s;
@@ -97,7 +99,7 @@
       top: 0;
       z-index: 100;
       border-bottom: 1px solid var(--stroke-soft);
-      background: rgba(15, 22, 48, 0.72);
+      background: rgba(255, 255, 255, 0.74);
       backdrop-filter: blur(10px);
     }
 
@@ -126,11 +128,11 @@
       width: 38px;
       height: 38px;
       border-radius: 10px;
-      background: linear-gradient(145deg, var(--amber), #f7bf58);
-      box-shadow: 0 10px 20px rgba(245, 166, 35, 0.28);
+      background: linear-gradient(135deg, #7b90ff, #b188ff 62%, #f2a684);
+      box-shadow: 0 10px 20px rgba(95, 112, 174, 0.3);
       display: grid;
       place-items: center;
-      color: #12192d;
+      color: #182034;
     }
 
     .brand-icon svg {
@@ -144,7 +146,7 @@
     }
 
     .brand span span {
-      color: var(--amber);
+      color: var(--violet);
     }
 
     .header-right {
@@ -171,7 +173,7 @@
     }
 
     .nav-links a:hover {
-      color: var(--amber);
+      color: var(--violet);
     }
 
     .nav-links a::after {
@@ -181,7 +183,7 @@
       bottom: -5px;
       width: 0;
       height: 2px;
-      background: var(--amber);
+      background: linear-gradient(90deg, #7b90ff, #de7c58);
       transition: width var(--transition);
     }
 
@@ -209,21 +211,21 @@
     }
 
     .btn-header:hover {
-      border-color: rgba(245, 166, 35, 0.4);
-      color: var(--amber);
-      background: var(--amber-soft);
+      border-color: rgba(115, 104, 226, 0.34);
+      color: var(--violet);
+      background: rgba(123, 144, 255, 0.14);
     }
 
     .btn-header.primary {
       border-color: transparent;
-      background: var(--amber);
-      color: #101628;
-      box-shadow: 0 8px 18px rgba(245, 166, 35, 0.26);
+      background: linear-gradient(130deg, #7b90ff, #b188ff 58%, #f2a684);
+      color: #182034;
+      box-shadow: 0 8px 20px rgba(95, 112, 174, 0.3);
     }
 
     .btn-header.primary:hover {
-      background: #f7ba4d;
-      color: #101628;
+      background: linear-gradient(130deg, #6f85ff, #a97ef6 58%, #ef9c78);
+      color: #182034;
     }
 
     .hero {
@@ -242,9 +244,9 @@
       margin-bottom: 18px;
       padding: 7px 12px;
       border-radius: 7px;
-      border: 1px solid rgba(245, 166, 35, 0.32);
-      background: var(--amber-soft);
-      color: var(--amber);
+      border: 1px solid rgba(115, 104, 226, 0.3);
+      background: rgba(123, 144, 255, 0.14);
+      color: var(--violet);
       font-family: "DM Mono", monospace;
       text-transform: uppercase;
       font-size: 10px;
@@ -263,7 +265,7 @@
     }
 
     .hero h1 em {
-      color: var(--amber);
+      color: var(--violet);
       font-style: italic;
     }
 
@@ -298,26 +300,26 @@
     }
 
     .btn-primary {
-      background: var(--amber);
-      color: #101628;
-      box-shadow: 0 9px 20px rgba(245, 166, 35, 0.3);
+      background: linear-gradient(130deg, #7b90ff, #b188ff 58%, #f2a684);
+      color: #182034;
+      box-shadow: 0 10px 24px rgba(95, 112, 174, 0.3);
     }
 
     .btn-primary:hover {
-      background: #f7ba4d;
+      background: linear-gradient(130deg, #6f85ff, #a97ef6 58%, #ef9c78);
       transform: translateY(-1px);
     }
 
     .btn-secondary {
       border-color: var(--stroke);
       color: var(--text-2);
-      background: rgba(255, 255, 255, 0.03);
+      background: rgba(255, 255, 255, 0.62);
     }
 
     .btn-secondary:hover {
-      border-color: rgba(245, 166, 35, 0.42);
-      color: var(--amber);
-      background: var(--amber-soft);
+      border-color: rgba(115, 104, 226, 0.34);
+      color: var(--violet);
+      background: rgba(123, 144, 255, 0.14);
     }
 
     .hero-note {
@@ -341,7 +343,7 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      color: var(--amber);
+      color: var(--violet);
       font-family: "DM Mono", monospace;
       font-size: 11px;
       letter-spacing: 1px;
@@ -379,7 +381,7 @@
       width: 16px;
       height: 16px;
       margin-top: 2px;
-      stroke: var(--amber);
+      stroke: var(--violet);
       fill: none;
       stroke-width: 2;
       stroke-linecap: round;
@@ -411,7 +413,7 @@
       font-family: "Libre Baskerville", serif;
       font-size: clamp(26px, 3.5vw, 34px);
       font-weight: 700;
-      color: var(--amber);
+      color: var(--violet);
       line-height: 1;
     }
 
@@ -467,17 +469,17 @@
 
     .feature-card:hover {
       transform: translateY(-3px);
-      border-color: rgba(245, 166, 35, 0.34);
-      box-shadow: 0 16px 36px rgba(2, 8, 23, 0.45);
+      border-color: rgba(115, 104, 226, 0.32);
+      box-shadow: 0 16px 36px rgba(58, 77, 118, 0.2);
     }
 
     .icon-badge {
       width: 38px;
       height: 38px;
       border-radius: 10px;
-      border: 1px solid rgba(245, 166, 35, 0.3);
-      background: var(--amber-soft);
-      color: var(--amber);
+      border: 1px solid rgba(115, 104, 226, 0.26);
+      background: rgba(123, 144, 255, 0.14);
+      color: var(--violet);
       display: grid;
       place-items: center;
     }
@@ -520,7 +522,7 @@
 
     .bloom-level:hover {
       transform: translateY(-2px);
-      border-color: rgba(245, 166, 35, 0.34);
+      border-color: rgba(115, 104, 226, 0.32);
     }
 
     .bloom-dot {
@@ -529,7 +531,7 @@
       margin: 0 auto 10px;
       border-radius: 50%;
       background: var(--dot);
-      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 0 4px rgba(115, 104, 226, 0.12);
     }
 
     .bloom-level h4 {
@@ -562,8 +564,8 @@
       width: 32px;
       height: 32px;
       border-radius: 8px;
-      background: var(--amber);
-      color: #12192d;
+      background: linear-gradient(130deg, #7b90ff, #b188ff 58%, #f2a684);
+      color: #182034;
       font-family: "DM Mono", monospace;
       font-weight: 700;
       font-size: 14px;
@@ -610,6 +612,7 @@
       color: var(--text-3);
       text-align: center;
       font-size: 12px;
+      background: rgba(255, 255, 255, 0.5);
     }
 
     .reveal {
